@@ -123,9 +123,9 @@ Run the following commands from the project directory using Python 3.11:
 ```powershell
 python -m pip install -r requirements.txt
 python -m playwright install chromium
+```
 
 ## Done by
-
 Developed by **Jossy Grundmann** (jossy.grundmann@tum.de).
 
 This project was created as a personal football data-analysis and visualization project, including:
