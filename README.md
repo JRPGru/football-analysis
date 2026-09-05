@@ -37,3 +37,6 @@ An interactive browser-based 3D scatter plot with selectable metrics, player
 information on hover/click, and filters. This visualization is not implemented yet.
 
 See [agent.md](agent.md) for source priorities, matching rules, and project scope.
+
+See [CSV glossary (German)](CSV_GLOSSAR_DE.md) for explanations of all 110 CSV
+columns, abbreviations, units, examples, and interpretation notes.
