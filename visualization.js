@@ -1785,7 +1785,9 @@ function renderPlot(players) {
           text:
             "Physical intensity"
 
-        }
+        },
+
+        autorange: "reversed",
 
       },
 
