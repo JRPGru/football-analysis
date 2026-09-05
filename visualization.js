@@ -1,564 +1,762 @@
 "use strict";
 
+/*
+Bundesliga 2025/26 — grouped PCA 3D visualization
+
+Expected input:
+    player_pca.csv
+
+Axes:
+    X = physical_score
+    Y = offensive_score
+    Z = defensive_score
+
+Filters:
+    - Position: multi-select
+    - Club: multi-select
+    - Age: min/max range
+
+Filter behaviour:
+    - no filter active:
+        every player keeps normal position colour
+
+    - filter active:
+        matching players keep position colour
+
+    - non-matching players:
+        remain visible but become gray
+*/
+
 
 const CONFIG = {
-  csvFile: "player_pca.csv",
+
+  csvFile:
+    "player_pca.csv",
+
 
   colors: {
-    GK: "#ff8c1a",
-    DF: "#ffd84d",
-    MF: "#35c66f",
-    FW: "#3f8cff"
+
+    GK:
+      "#ff8c1a",
+
+    DF:
+      "#ffd84d",
+
+    MF:
+      "#35c66f",
+
+    FW:
+      "#3f8cff"
+
   },
+
 
   labels: {
-    GK: "Goalkeepers",
-    DF: "Defenders",
-    MF: "Midfielders",
-    FW: "Forwards"
+
+    GK:
+      "Goalkeepers",
+
+    DF:
+      "Defenders",
+
+    MF:
+      "Midfielders",
+
+    FW:
+      "Forwards"
+
   },
 
-  inactiveColor: "#68717c",
-  inactiveOpacity: 0.20,
-  activeOpacity: 0.90
+
+  inactiveColor:
+    "#666d76",
+
+
+  activeOpacity:
+    0.92,
+
+
+  markerSize:
+    5.8
+
 };
 
 
 let ALL_PLAYERS = [];
+
+
 let FILTER_STATE = {
-  positions: new Set(),
-  clubs: new Set(),
-  minAge: null,
-  maxAge: null
+
+  positions:
+    new Set(),
+
+  clubs:
+    new Set(),
+
+  minAge:
+    null,
+
+  maxAge:
+    null
+
 };
 
 
+// -----------------------------------------------------------------------------
+// Parsing / validation
+// -----------------------------------------------------------------------------
+
+
 function parseNumber(value) {
-  if (value === null || value === undefined) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
     return NaN;
+
   }
+
 
   const cleaned = String(value)
-    .trim()
-    .replace(",", ".");
 
-  if (cleaned === "") {
+    .trim()
+
+    .replace(
+      ",",
+      "."
+    );
+
+
+  if (
+    cleaned === ""
+  ) {
+
     return NaN;
+
   }
 
-  const result = Number(cleaned);
+
+  const result =
+    Number(cleaned);
+
 
   return Number.isFinite(result)
+
     ? result
+
     : NaN;
+
 }
 
 
 function validateColumns(headers) {
+
   const requiredColumns = [
+
     "player",
     "team",
     "position",
     "position_group",
+
     "age",
     "minutes",
 
-    "PC1",
-    "PC2",
-    "PC3",
+    "physical_score",
+    "offensive_score",
+    "defensive_score",
 
     "distance_per90",
     "sprints_per90",
     "intensive_runs_per90",
+    "top_speed_kmh",
+    "sprints_per_km",
+    "intensive_runs_per_km",
+
+    "goals_per90",
+    "assists_per90",
+    "shots_per90",
+    "shots_on_target_per90",
+    "crosses_per90",
+    "fouls_drawn_per90",
+    "offsides_per90",
+    "penalty_attempts_per90",
+
     "duels_won_per90",
     "aerial_duels_won_per90",
     "tackles_won_per90",
     "interceptions_per90",
     "fouls_committed_per90",
-    "fouls_drawn_per90",
-    "crosses_per90",
-    "top_speed_kmh",
+    "yellow_cards_per90",
 
     "observed_features",
     "imputed_features"
+
   ];
 
+
   return requiredColumns.filter(
-    column => !headers.includes(column)
+
+    column =>
+      !headers.includes(
+        column
+      )
+
   );
+
 }
 
 
 function preparePlayers(rows) {
+
   return rows
-    .map(row => ({
-      player: String(
-        row.player ?? ""
-      ).trim(),
 
-      team: String(
-        row.team ?? ""
-      ).trim(),
+    .map(
+      row => ({
 
-      position: String(
-        row.position ?? ""
-      ).trim(),
+        player:
+          String(
+            row.player ?? ""
+          ).trim(),
 
-      positionGroup: String(
-        row.position_group ?? ""
-      ).trim(),
 
-      age: parseNumber(
-        row.age
-      ),
+        team:
+          String(
+            row.team ?? ""
+          ).trim(),
 
-      minutes: parseNumber(
-        row.minutes
-      ),
 
-      PC1: parseNumber(
-        row.PC1
-      ),
+        position:
+          String(
+            row.position ?? ""
+          ).trim(),
 
-      PC2: parseNumber(
-        row.PC2
-      ),
 
-      PC3: parseNumber(
-        row.PC3
-      ),
+        positionGroup:
+          String(
+            row.position_group ?? ""
+          ).trim(),
 
-      observedFeatures: parseNumber(
-        row.observed_features
-      ),
 
-      imputedFeatures: parseNumber(
-        row.imputed_features
-      ),
+        age:
+          parseNumber(
+            row.age
+          ),
 
-      distancePer90: parseNumber(
-        row.distance_per90
-      ),
 
-      sprintsPer90: parseNumber(
-        row.sprints_per90
-      ),
+        minutes:
+          parseNumber(
+            row.minutes
+          ),
 
-      intensiveRunsPer90: parseNumber(
-        row.intensive_runs_per90
-      ),
 
-      duelsWonPer90: parseNumber(
-        row.duels_won_per90
-      ),
+        physicalScore:
+          parseNumber(
+            row.physical_score
+          ),
 
-      aerialDuelsWonPer90: parseNumber(
-        row.aerial_duels_won_per90
-      ),
 
-      tacklesWonPer90: parseNumber(
-        row.tackles_won_per90
-      ),
+        offensiveScore:
+          parseNumber(
+            row.offensive_score
+          ),
 
-      interceptionsPer90: parseNumber(
-        row.interceptions_per90
-      ),
 
-      foulsCommittedPer90: parseNumber(
-        row.fouls_committed_per90
-      ),
+        defensiveScore:
+          parseNumber(
+            row.defensive_score
+          ),
 
-      foulsDrawnPer90: parseNumber(
-        row.fouls_drawn_per90
-      ),
 
-      crossesPer90: parseNumber(
-        row.crosses_per90
-      ),
+        // Physical
 
-      topSpeedKmh: parseNumber(
-        row.top_speed_kmh
-      )
-    }))
+        distancePer90:
+          parseNumber(
+            row.distance_per90
+          ),
 
-    .filter(player =>
-      player.player &&
-      ["GK", "DF", "MF", "FW"]
-        .includes(player.positionGroup) &&
-      Number.isFinite(player.PC1) &&
-      Number.isFinite(player.PC2) &&
-      Number.isFinite(player.PC3)
+
+        sprintsPer90:
+          parseNumber(
+            row.sprints_per90
+          ),
+
+
+        intensiveRunsPer90:
+          parseNumber(
+            row.intensive_runs_per90
+          ),
+
+
+        topSpeedKmh:
+          parseNumber(
+            row.top_speed_kmh
+          ),
+
+
+        sprintsPerKm:
+          parseNumber(
+            row.sprints_per_km
+          ),
+
+
+        intensiveRunsPerKm:
+          parseNumber(
+            row.intensive_runs_per_km
+          ),
+
+
+        // Offense
+
+        goalsPer90:
+          parseNumber(
+            row.goals_per90
+          ),
+
+
+        assistsPer90:
+          parseNumber(
+            row.assists_per90
+          ),
+
+
+        shotsPer90:
+          parseNumber(
+            row.shots_per90
+          ),
+
+
+        shotsOnTargetPer90:
+          parseNumber(
+            row.shots_on_target_per90
+          ),
+
+
+        crossesPer90:
+          parseNumber(
+            row.crosses_per90
+          ),
+
+
+        foulsDrawnPer90:
+          parseNumber(
+            row.fouls_drawn_per90
+          ),
+
+
+        offsidesPer90:
+          parseNumber(
+            row.offsides_per90
+          ),
+
+
+        penaltyAttemptsPer90:
+          parseNumber(
+            row.penalty_attempts_per90
+          ),
+
+
+        // Defense
+
+        duelsWonPer90:
+          parseNumber(
+            row.duels_won_per90
+          ),
+
+
+        aerialDuelsWonPer90:
+          parseNumber(
+            row.aerial_duels_won_per90
+          ),
+
+
+        tacklesWonPer90:
+          parseNumber(
+            row.tackles_won_per90
+          ),
+
+
+        interceptionsPer90:
+          parseNumber(
+            row.interceptions_per90
+          ),
+
+
+        foulsCommittedPer90:
+          parseNumber(
+            row.fouls_committed_per90
+          ),
+
+
+        yellowCardsPer90:
+          parseNumber(
+            row.yellow_cards_per90
+          ),
+
+
+        observedFeatures:
+          parseNumber(
+            row.observed_features
+          ),
+
+
+        imputedFeatures:
+          parseNumber(
+            row.imputed_features
+          )
+
+      })
+    )
+
+
+    .filter(
+      player =>
+
+        player.player &&
+
+        [
+          "GK",
+          "DF",
+          "MF",
+          "FW"
+        ].includes(
+          player.positionGroup
+        ) &&
+
+        Number.isFinite(
+          player.physicalScore
+        ) &&
+
+        Number.isFinite(
+          player.offensiveScore
+        ) &&
+
+        Number.isFinite(
+          player.defensiveScore
+        )
+
     );
+
 }
 
 
-/*
---------------------------------------------------
-CLUB HANDLING
---------------------------------------------------
+// -----------------------------------------------------------------------------
+// Club helpers
+// -----------------------------------------------------------------------------
 
-If a player has:
-"Bayern Munich / Augsburg"
-
-then that player belongs to both club filters.
-*/
 
 function getPlayerClubs(player) {
+
   return player.team
+
     .split("/")
-    .map(club => club.trim())
+
+    .map(
+      club =>
+        club.trim()
+    )
+
     .filter(Boolean);
+
 }
 
 
 function getAvailableClubs(players) {
-  const clubs = new Set();
 
-  for (const player of players) {
-    for (const club of getPlayerClubs(player)) {
-      clubs.add(club);
+  const clubs =
+    new Set();
+
+
+  for (
+    const player of players
+  ) {
+
+    for (
+      const club
+      of getPlayerClubs(player)
+    ) {
+
+      clubs.add(
+        club
+      );
+
     }
+
   }
 
+
   return [...clubs].sort(
-    (a, b) => a.localeCompare(b)
+
+    (a, b) =>
+      a.localeCompare(b)
+
   );
+
 }
 
 
-/*
---------------------------------------------------
-FILTER LOGIC
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Filter logic
+// -----------------------------------------------------------------------------
+
 
 function filtersAreActive() {
+
   return (
+
     FILTER_STATE.positions.size > 0 ||
+
     FILTER_STATE.clubs.size > 0 ||
+
     FILTER_STATE.minAge !== null ||
+
     FILTER_STATE.maxAge !== null
+
   );
+
 }
 
 
 function playerMatchesFilters(player) {
 
-  /*
-  Position filter
-  */
+  // ---------------------------------------------------------------------------
+  // Position
+  // ---------------------------------------------------------------------------
+  //
+  // Multiple selected positions use OR.
+  //
+  // Example:
+  //
+  // DF + MF
+  //
+  // means:
+  //
+  // defender OR midfielder
+  // ---------------------------------------------------------------------------
 
   if (
+
     FILTER_STATE.positions.size > 0 &&
+
     !FILTER_STATE.positions.has(
       player.positionGroup
     )
+
   ) {
+
     return false;
+
   }
 
 
-  /*
-  Club filter
-
-  Player only has to belong to ONE
-  of the selected clubs.
-  */
-
-  if (FILTER_STATE.clubs.size > 0) {
-    const playerClubs =
-      getPlayerClubs(player);
-
-    const matchesClub =
-      playerClubs.some(
-        club =>
-          FILTER_STATE.clubs.has(club)
-      );
-
-    if (!matchesClub) {
-      return false;
-    }
-  }
-
-
-  /*
-  Age filter
-
-  Missing age cannot be considered
-  a match when age filtering is active.
-  */
+  // ---------------------------------------------------------------------------
+  // Club
+  // ---------------------------------------------------------------------------
 
   if (
-    FILTER_STATE.minAge !== null ||
-    FILTER_STATE.maxAge !== null
+    FILTER_STATE.clubs.size > 0
   ) {
-    if (!Number.isFinite(player.age)) {
-      return false;
-    }
+
+    const matchesClub =
+
+      getPlayerClubs(player)
+
+        .some(
+
+          club =>
+            FILTER_STATE.clubs.has(
+              club
+            )
+
+        );
+
 
     if (
+      !matchesClub
+    ) {
+
+      return false;
+
+    }
+
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // Age
+  // ---------------------------------------------------------------------------
+
+  if (
+
+    FILTER_STATE.minAge !== null ||
+
+    FILTER_STATE.maxAge !== null
+
+  ) {
+
+
+    if (
+      !Number.isFinite(
+        player.age
+      )
+    ) {
+
+      return false;
+
+    }
+
+
+    if (
+
       FILTER_STATE.minAge !== null &&
-      player.age < FILTER_STATE.minAge
+
+      player.age <
+        FILTER_STATE.minAge
+
     ) {
+
       return false;
+
     }
 
+
     if (
+
       FILTER_STATE.maxAge !== null &&
-      player.age > FILTER_STATE.maxAge
+
+      player.age >
+        FILTER_STATE.maxAge
+
     ) {
+
       return false;
+
     }
+
   }
 
 
   return true;
+
 }
 
 
-/*
---------------------------------------------------
-FILTER UI
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// HTML escaping
+// -----------------------------------------------------------------------------
 
-function injectFilterStyles() {
-  const style =
-    document.createElement("style");
 
-  style.textContent = `
+function escapeHtml(text) {
 
-    #pca-filter-panel {
-      margin: 0 0 16px 0;
-      padding: 16px;
+  const element =
+    document.createElement(
+      "div"
+    );
 
-      background: #11151a;
-      border: 1px solid #26303a;
-      border-radius: 14px;
 
-      color: #e9eef5;
+  element.textContent =
+    String(text);
 
-      font-family:
-        Inter,
-        system-ui,
-        sans-serif;
-    }
 
+  return element.innerHTML;
 
-    .filter-grid {
-      display: grid;
-
-      grid-template-columns:
-        minmax(180px, 1fr)
-        minmax(240px, 2fr)
-        minmax(200px, 1fr);
-
-      gap: 22px;
-    }
-
-
-    .filter-section-title {
-      margin-bottom: 8px;
-
-      font-size: 13px;
-      font-weight: 700;
-
-      color: #cbd5df;
-
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-
-    .filter-checkboxes {
-      display: flex;
-      flex-wrap: wrap;
-
-      gap: 7px;
-    }
-
-
-    .filter-checkbox {
-      display: inline-flex;
-      align-items: center;
-
-      gap: 6px;
-
-      padding: 6px 9px;
-
-      border: 1px solid #34404c;
-      border-radius: 7px;
-
-      background: #151a20;
-
-      font-size: 13px;
-
-      cursor: pointer;
-
-      user-select: none;
-    }
-
-
-    .filter-checkbox:hover {
-      border-color: #66717d;
-    }
-
-
-    .filter-checkbox input {
-      margin: 0;
-      cursor: pointer;
-    }
-
-
-    #club-filter-list {
-      max-height: 150px;
-
-      overflow-y: auto;
-
-      display: flex;
-      flex-wrap: wrap;
-
-      gap: 7px;
-
-      padding-right: 5px;
-    }
-
-
-    .age-filter {
-      display: flex;
-
-      align-items: center;
-
-      gap: 8px;
-    }
-
-
-    .age-filter input {
-      width: 80px;
-
-      padding: 7px 8px;
-
-      background: #151a20;
-
-      border: 1px solid #34404c;
-      border-radius: 7px;
-
-      color: #ffffff;
-
-      font-size: 14px;
-    }
-
-
-    .age-filter span {
-      color: #8995a2;
-    }
-
-
-    .filter-footer {
-      display: flex;
-
-      align-items: center;
-      justify-content: space-between;
-
-      gap: 12px;
-
-      margin-top: 15px;
-
-      padding-top: 12px;
-
-      border-top: 1px solid #26303a;
-    }
-
-
-    #filter-result-count {
-      font-size: 13px;
-
-      color: #aeb8c2;
-    }
-
-
-    #clear-filters {
-      padding: 7px 12px;
-
-      border: 1px solid #40505f;
-      border-radius: 7px;
-
-      background: #151a20;
-
-      color: #e9eef5;
-
-      cursor: pointer;
-
-      font-size: 13px;
-    }
-
-
-    #clear-filters:hover {
-      background: #1d242c;
-    }
-
-
-    @media (max-width: 900px) {
-
-      .filter-grid {
-        grid-template-columns: 1fr;
-      }
-
-    }
-
-  `;
-
-  document.head.appendChild(style);
 }
+
+
+function escapeHtmlAttribute(text) {
+
+  return String(text)
+
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+
+    .replaceAll(
+      ">",
+      "&gt;"
+    );
+
+}
+
+
+// -----------------------------------------------------------------------------
+// Filter UI
+// -----------------------------------------------------------------------------
 
 
 function createFilterPanel(players) {
 
-  injectFilterStyles();
-
-
-  const chartCard =
-    document.querySelector(
-      ".chart-card"
+  const panel =
+    document.getElementById(
+      "filter-panel"
     );
 
-  if (!chartCard) {
+
+  if (!panel) {
+
     console.warn(
-      "Could not find .chart-card for filter placement."
+      "Missing #filter-panel in index.html"
     );
 
     return;
+
   }
 
 
   const clubs =
-    getAvailableClubs(players);
+    getAvailableClubs(
+      players
+    );
 
 
-  const ages =
-    players
-      .map(player => player.age)
-      .filter(Number.isFinite);
+  const ages = players
+
+    .map(
+      player =>
+        player.age
+    )
+
+    .filter(
+      Number.isFinite
+    );
 
 
   const datasetMinAge =
-    Math.floor(
-      Math.min(...ages)
-    );
+
+    ages.length
+
+      ? Math.floor(
+          Math.min(
+            ...ages
+          )
+        )
+
+      : 0;
 
 
   const datasetMaxAge =
-    Math.ceil(
-      Math.max(...ages)
-    );
 
+    ages.length
 
-  const panel =
-    document.createElement("section");
+      ? Math.ceil(
+          Math.max(
+            ...ages
+          )
+        )
 
-
-  panel.id =
-    "pca-filter-panel";
+      : 100;
 
 
   panel.innerHTML = `
@@ -566,60 +764,90 @@ function createFilterPanel(players) {
     <div class="filter-grid">
 
 
-      <div>
+      <div class="filter-section">
 
         <div class="filter-section-title">
           Position
         </div>
 
+
         <div
-          class="filter-checkboxes"
+          class="filter-chip-list"
           id="position-filter-list"
         >
 
           ${[
-            ["GK", "Goalkeepers"],
-            ["DF", "Defenders"],
-            ["MF", "Midfielders"],
-            ["FW", "Forwards"]
+
+            [
+              "GK",
+              "Goalkeepers"
+            ],
+
+            [
+              "DF",
+              "Defenders"
+            ],
+
+            [
+              "MF",
+              "Midfielders"
+            ],
+
+            [
+              "FW",
+              "Forwards"
+            ]
+
           ]
-            .map(
-              ([code, label]) => `
 
-                <label class="filter-checkbox">
+          .map(
 
-                  <input
-                    type="checkbox"
-                    class="position-filter"
-                    value="${code}"
-                  >
+            ([code, label]) => `
 
+              <label class="filter-chip">
+
+                <input
+                  type="checkbox"
+                  class="position-filter"
+                  value="${code}"
+                >
+
+                <span>
                   ${label}
+                </span>
 
-                </label>
+              </label>
 
-              `
-            )
-            .join("")}
+            `
+
+          )
+
+          .join("")}
 
         </div>
 
       </div>
 
 
-      <div>
+      <div class="filter-section">
 
         <div class="filter-section-title">
           Club
         </div>
 
-        <div id="club-filter-list">
+
+        <div
+          class="club-filter-list"
+          id="club-filter-list"
+        >
 
           ${clubs
+
             .map(
+
               club => `
 
-                <label class="filter-checkbox">
+                <label class="filter-chip">
 
                   <input
                     type="checkbox"
@@ -627,12 +855,16 @@ function createFilterPanel(players) {
                     value="${escapeHtmlAttribute(club)}"
                   >
 
-                  ${escapeHtml(club)}
+                  <span>
+                    ${escapeHtml(club)}
+                  </span>
 
                 </label>
 
               `
+
             )
+
             .join("")}
 
         </div>
@@ -640,33 +872,52 @@ function createFilterPanel(players) {
       </div>
 
 
-      <div>
+      <div class="filter-section">
 
         <div class="filter-section-title">
           Age
         </div>
 
+
         <div class="age-filter">
 
-          <input
-            type="number"
-            id="age-min"
-            min="${datasetMinAge}"
-            max="${datasetMaxAge}"
-            placeholder="${datasetMinAge}"
-          >
+          <label>
 
-          <span>
+            <span>
+              Min
+            </span>
+
+            <input
+              type="number"
+              id="age-min"
+              min="${datasetMinAge}"
+              max="${datasetMaxAge}"
+              placeholder="${datasetMinAge}"
+            >
+
+          </label>
+
+
+          <span class="age-separator">
             to
           </span>
 
-          <input
-            type="number"
-            id="age-max"
-            min="${datasetMinAge}"
-            max="${datasetMaxAge}"
-            placeholder="${datasetMaxAge}"
-          >
+
+          <label>
+
+            <span>
+              Max
+            </span>
+
+            <input
+              type="number"
+              id="age-max"
+              min="${datasetMinAge}"
+              max="${datasetMaxAge}"
+              placeholder="${datasetMaxAge}"
+            >
+
+          </label>
 
         </div>
 
@@ -679,14 +930,20 @@ function createFilterPanel(players) {
     <div class="filter-footer">
 
       <div id="filter-result-count">
-        No filters active
+
+        No filters active ·
+        ${players.length} players
+
       </div>
+
 
       <button
         id="clear-filters"
         type="button"
       >
+
         Clear filters
+
       </button>
 
     </div>
@@ -694,130 +951,130 @@ function createFilterPanel(players) {
   `;
 
 
-  chartCard.parentNode.insertBefore(
-    panel,
-    chartCard
-  );
+  panel.hidden =
+    false;
 
 
   attachFilterEvents();
+
 }
 
 
-function escapeHtml(text) {
-  const element =
-    document.createElement("div");
+// -----------------------------------------------------------------------------
+// Filter events
+// -----------------------------------------------------------------------------
 
-  element.textContent =
-    text;
-
-  return element.innerHTML;
-}
-
-
-function escapeHtmlAttribute(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-
-/*
---------------------------------------------------
-FILTER EVENTS
---------------------------------------------------
-*/
 
 function attachFilterEvents() {
 
   document
+
     .querySelectorAll(
-      ".position-filter"
+      ".position-filter, .club-filter"
     )
-    .forEach(input => {
 
-      input.addEventListener(
-        "change",
-        readFiltersFromUI
-      );
+    .forEach(
+      input => {
 
-    });
+        input.addEventListener(
+
+          "change",
+
+          readFiltersFromUI
+
+        );
+
+      }
+    );
 
 
   document
-    .querySelectorAll(
-      ".club-filter"
-    )
-    .forEach(input => {
 
-      input.addEventListener(
-        "change",
-        readFiltersFromUI
-      );
-
-    });
-
-
-  document
     .getElementById(
       "age-min"
     )
-    .addEventListener(
+
+    ?.addEventListener(
+
       "input",
+
       readFiltersFromUI
+
     );
 
 
   document
+
     .getElementById(
       "age-max"
     )
-    .addEventListener(
+
+    ?.addEventListener(
+
       "input",
+
       readFiltersFromUI
+
     );
 
 
   document
+
     .getElementById(
       "clear-filters"
     )
-    .addEventListener(
+
+    ?.addEventListener(
+
       "click",
+
       clearFilters
+
     );
+
 }
+
+
+// -----------------------------------------------------------------------------
+// Read filters
+// -----------------------------------------------------------------------------
 
 
 function readFiltersFromUI() {
 
   FILTER_STATE.positions =
+
     new Set(
+
       [
         ...document.querySelectorAll(
           ".position-filter:checked"
         )
       ]
-        .map(
-          element =>
-            element.value
-        )
+
+      .map(
+        element =>
+          element.value
+      )
+
     );
 
 
   FILTER_STATE.clubs =
+
     new Set(
+
       [
         ...document.querySelectorAll(
           ".club-filter:checked"
         )
       ]
-        .map(
-          element =>
-            element.value
-        )
+
+      .map(
+        element =>
+          element.value
+      )
+
     );
 
 
@@ -834,37 +1091,59 @@ function readFiltersFromUI() {
 
 
   FILTER_STATE.minAge =
-    minAgeInput.value === ""
-      ? null
-      : Number(minAgeInput.value);
+
+    (
+      minAgeInput &&
+      minAgeInput.value !== ""
+    )
+
+      ? Number(
+          minAgeInput.value
+        )
+
+      : null;
 
 
   FILTER_STATE.maxAge =
-    maxAgeInput.value === ""
-      ? null
-      : Number(maxAgeInput.value);
+
+    (
+      maxAgeInput &&
+      maxAgeInput.value !== ""
+    )
+
+      ? Number(
+          maxAgeInput.value
+        )
+
+      : null;
 
 
-  /*
-  If user accidentally enters:
-  min = 30
-  max = 20
-
-  swap them.
-  */
+  // If age limits were accidentally entered backwards:
+  // Min = 30
+  // Max = 20
+  //
+  // interpret this as:
+  // 20 - 30
 
   if (
+
     FILTER_STATE.minAge !== null &&
+
     FILTER_STATE.maxAge !== null &&
+
     FILTER_STATE.minAge >
       FILTER_STATE.maxAge
+
   ) {
+
 
     const temp =
       FILTER_STATE.minAge;
 
+
     FILTER_STATE.minAge =
       FILTER_STATE.maxAge;
+
 
     FILTER_STATE.maxAge =
       temp;
@@ -873,47 +1152,87 @@ function readFiltersFromUI() {
 
 
   updatePlotFilters();
+
 }
+
+
+// -----------------------------------------------------------------------------
+// Clear filters
+// -----------------------------------------------------------------------------
 
 
 function clearFilters() {
 
   document
+
     .querySelectorAll(
       ".position-filter, .club-filter"
     )
-    .forEach(input => {
-      input.checked = false;
-    });
+
+    .forEach(
+      input => {
+
+        input.checked =
+          false;
+
+      }
+    );
 
 
-  document.getElementById(
-    "age-min"
-  ).value = "";
+  const minAgeInput =
+    document.getElementById(
+      "age-min"
+    );
 
 
-  document.getElementById(
-    "age-max"
-  ).value = "";
+  const maxAgeInput =
+    document.getElementById(
+      "age-max"
+    );
+
+
+  if (minAgeInput) {
+
+    minAgeInput.value =
+      "";
+
+  }
+
+
+  if (maxAgeInput) {
+
+    maxAgeInput.value =
+      "";
+
+  }
 
 
   FILTER_STATE = {
-    positions: new Set(),
-    clubs: new Set(),
-    minAge: null,
-    maxAge: null
+
+    positions:
+      new Set(),
+
+    clubs:
+      new Set(),
+
+    minAge:
+      null,
+
+    maxAge:
+      null
+
   };
 
 
   updatePlotFilters();
+
 }
 
 
-/*
---------------------------------------------------
-PLOT FILTER UPDATE
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Update point colours after filtering
+// -----------------------------------------------------------------------------
+
 
 function updatePlotFilters() {
 
@@ -921,95 +1240,113 @@ function updatePlotFilters() {
     filtersAreActive();
 
 
-  let matchedPlayers = 0;
+  let matchedPlayers =
+    0;
 
 
-  const updates =
-    ["GK", "DF", "MF", "FW"]
-      .map(
-        positionCode => {
+  const positionCodes = [
 
-          const group =
-            ALL_PLAYERS.filter(
-              player =>
-                player.positionGroup ===
+    "GK",
+    "DF",
+    "MF",
+    "FW"
+
+  ];
+
+
+  positionCodes.forEach(
+
+    (
+      positionCode,
+      traceIndex
+    ) => {
+
+
+      const group =
+
+        ALL_PLAYERS.filter(
+
+          player =>
+            player.positionGroup ===
+            positionCode
+
+        );
+
+
+      const colors =
+
+        group.map(
+
+          player => {
+
+
+            const matches =
+
+              !active ||
+
+              playerMatchesFilters(
+                player
+              );
+
+
+            if (matches) {
+
+              matchedPlayers +=
+                1;
+
+
+              return CONFIG.colors[
                 positionCode
-            );
+              ];
+
+            }
 
 
-          const colors =
-            group.map(player => {
+            return CONFIG.inactiveColor;
 
-              const matches =
-                !active ||
-                playerMatchesFilters(player);
+          }
 
+        );
 
-              if (matches) {
-                matchedPlayers++;
-
-                return CONFIG.colors[
-                  positionCode
-                ];
-              }
-
-
-              return CONFIG.inactiveColor;
-            });
-
-
-          const opacities =
-            group.map(player => {
-
-              const matches =
-                !active ||
-                playerMatchesFilters(player);
-
-
-              return matches
-                ? CONFIG.activeOpacity
-                : CONFIG.inactiveOpacity;
-            });
-
-
-          return {
-            positionCode,
-            colors,
-            opacities
-          };
-
-        }
-      );
-
-
-  updates.forEach(
-    (update, traceIndex) => {
 
       Plotly.restyle(
+
         "player-cloud",
 
         {
-          "marker.color": [
-            update.colors
-          ],
 
-          "marker.opacity": [
-            update.opacities
-          ]
+          "marker.color":
+            [
+              colors
+            ]
+
         },
 
-        [traceIndex]
+        [
+          traceIndex
+        ]
+
       );
 
     }
+
   );
 
 
   updateFilterStatus(
+
     active,
+
     matchedPlayers
+
   );
+
 }
+
+
+// -----------------------------------------------------------------------------
+// Filter status text
+// -----------------------------------------------------------------------------
 
 
 function updateFilterStatus(
@@ -1031,22 +1368,28 @@ function updateFilterStatus(
   if (!active) {
 
     element.textContent =
-      `No filters active · ${ALL_PLAYERS.length} players`;
+
+      `No filters active · ` +
+      `${ALL_PLAYERS.length} players`;
+
 
     return;
+
   }
 
 
   element.textContent =
-    `${matchedPlayers} of ${ALL_PLAYERS.length} players match`;
+
+    `${matchedPlayers} of ` +
+    `${ALL_PLAYERS.length} players match`;
+
 }
 
 
-/*
---------------------------------------------------
-PLOT TRACE
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Plot traces
+// -----------------------------------------------------------------------------
+
 
 function makeTrace(
   players,
@@ -1054,10 +1397,13 @@ function makeTrace(
 ) {
 
   const group =
+
     players.filter(
+
       player =>
         player.positionGroup ===
         positionCode
+
     );
 
 
@@ -1066,8 +1412,10 @@ function makeTrace(
     type:
       "scatter3d",
 
+
     mode:
       "markers",
+
 
     name:
       CONFIG.labels[
@@ -1075,74 +1423,121 @@ function makeTrace(
       ],
 
 
+    // -------------------------------------------------------------------------
+    // Three grouped PCA axes
+    // -------------------------------------------------------------------------
+
     x:
+
       group.map(
         player =>
-          player.PC1
+          player.physicalScore
       ),
+
 
     y:
+
       group.map(
         player =>
-          player.PC2
+          player.offensiveScore
       ),
 
+
     z:
+
       group.map(
         player =>
-          player.PC3
+          player.defensiveScore
       ),
 
 
     text:
+
       group.map(
         player =>
           player.player
       ),
 
 
+    // -------------------------------------------------------------------------
+    // Hover information
+    // -------------------------------------------------------------------------
+
     customdata:
-      group.map(player => [
 
-        player.team,
-        player.position,
-        player.age,
-        player.minutes,
+      group.map(
 
-        player.distancePer90,
-        player.sprintsPer90,
-        player.intensiveRunsPer90,
+        player => [
 
-        player.duelsWonPer90,
-        player.aerialDuelsWonPer90,
+          // Basic info
 
-        player.tacklesWonPer90,
-        player.interceptionsPer90,
+          player.team,                    // 0
+          player.position,                // 1
+          player.age,                     // 2
+          player.minutes,                 // 3
 
-        player.foulsCommittedPer90,
-        player.foulsDrawnPer90,
-        player.crossesPer90,
 
-        player.topSpeedKmh,
+          // Physical
 
-        player.observedFeatures,
-        player.imputedFeatures
+          player.distancePer90,           // 4
+          player.sprintsPer90,            // 5
+          player.intensiveRunsPer90,      // 6
+          player.topSpeedKmh,             // 7
+          player.sprintsPerKm,            // 8
+          player.intensiveRunsPerKm,      // 9
 
-      ]),
+
+          // Offense
+
+          player.goalsPer90,              // 10
+          player.assistsPer90,            // 11
+          player.shotsPer90,              // 12
+          player.shotsOnTargetPer90,      // 13
+          player.crossesPer90,            // 14
+          player.foulsDrawnPer90,         // 15
+          player.offsidesPer90,           // 16
+          player.penaltyAttemptsPer90,    // 17
+
+
+          // Defense
+
+          player.duelsWonPer90,           // 18
+          player.aerialDuelsWonPer90,     // 19
+          player.tacklesWonPer90,         // 20
+          player.interceptionsPer90,      // 21
+          player.foulsCommittedPer90,     // 22
+          player.yellowCardsPer90,        // 23
+
+
+          // Data quality
+          Number.isFinite(player.observedFeatures)
+          ? Math.round(player.observedFeatures).toString()
+          : "–",                       // 24
+
+          Number.isFinite(player.imputedFeatures)
+          ? Math.round(player.imputedFeatures).toString()
+          : "–"                        // 25
+
+        ]
+
+      ),
 
 
     marker: {
 
       size:
-        5.5,
+        CONFIG.markerSize,
+
 
       color:
         CONFIG.colors[
           positionCode
         ],
 
+
       opacity:
         CONFIG.activeOpacity,
+
 
       line: {
 
@@ -1165,19 +1560,23 @@ function makeTrace(
 
       "Age: %{customdata[2]:.0f}<br>" +
 
-      "<br>" +
-
-
-      "<b>PCA coordinates</b><br>" +
-
-      "PC1: %{x:.2f}<br>" +
-      "PC2: %{y:.2f}<br>" +
-      "PC3: %{z:.2f}<br>" +
+      "Minutes: %{customdata[3]:.0f}<br>" +
 
       "<br>" +
 
 
-      "<b>Physical profile</b><br>" +
+      "<b>Profile scores</b><br>" +
+
+      "Physical intensity: %{x:.2f}<br>" +
+
+      "Offensive activity: %{y:.2f}<br>" +
+
+      "Defensive activity: %{z:.2f}<br>" +
+
+      "<br>" +
+
+
+      "<b>Physical</b><br>" +
 
       "Distance / 90: %{customdata[4]:.2f} km<br>" +
 
@@ -1185,41 +1584,55 @@ function makeTrace(
 
       "Intensive runs / 90: %{customdata[6]:.1f}<br>" +
 
-      "Top speed: %{customdata[14]:.1f} km/h<br>" +
+      "Top speed: %{customdata[7]:.1f} km/h<br>" +
+
+      "Sprints / km: %{customdata[8]:.2f}<br>" +
+
+      "Intensive runs / km: %{customdata[9]:.2f}<br>" +
 
       "<br>" +
 
 
-      "<b>Duels / defensive actions</b><br>" +
+      "<b>Offense</b><br>" +
 
-      "Duels won / 90: %{customdata[7]:.2f}<br>" +
+      "Goals / 90: %{customdata[10]:.2f}<br>" +
 
-      "Aerial duels won / 90: %{customdata[8]:.2f}<br>" +
+      "Assists / 90: %{customdata[11]:.2f}<br>" +
 
-      "Tackles won / 90: %{customdata[9]:.2f}<br>" +
+      "Shots / 90: %{customdata[12]:.2f}<br>" +
 
-      "Interceptions / 90: %{customdata[10]:.2f}<br>" +
+      "Shots on target / 90: %{customdata[13]:.2f}<br>" +
 
-      "<br>" +
+      "Crosses / 90: %{customdata[14]:.2f}<br>" +
 
+      "Fouls drawn / 90: %{customdata[15]:.2f}<br>" +
 
-      "<b>Other actions</b><br>" +
+      "Offsides / 90: %{customdata[16]:.2f}<br>" +
 
-      "Fouls committed / 90: %{customdata[11]:.2f}<br>" +
-
-      "Fouls drawn / 90: %{customdata[12]:.2f}<br>" +
-
-      "Crosses / 90: %{customdata[13]:.2f}<br>" +
+      "Penalty attempts / 90: %{customdata[17]:.2f}<br>" +
 
       "<br>" +
 
 
-      "Minutes: %{customdata[3]:.0f}<br>" +
+      "<b>Defense</b><br>" +
 
-      "Observed PCA metrics: %{customdata[15]:.0f}<br>" +
+      "Duels won / 90: %{customdata[18]:.2f}<br>" +
 
-      "Imputed PCA metrics: %{customdata[16]:.0f>" +
+      "Aerial duels won / 90: %{customdata[19]:.2f}<br>" +
 
+      "Tackles won / 90: %{customdata[20]:.2f}<br>" +
+
+      "Interceptions / 90: %{customdata[21]:.2f}<br>" +
+
+      "Fouls committed / 90: %{customdata[22]:.2f}<br>" +
+
+      "Yellow cards / 90: %{customdata[23]:.2f}<br>" +
+
+      "<br>" +
+
+      "Observed PCA metrics: %{customdata[24]}<br>" +
+
+      "Imputed PCA metrics: %{customdata[25]}" +
 
       "<extra></extra>"
 
@@ -1228,34 +1641,65 @@ function makeTrace(
 }
 
 
-/*
---------------------------------------------------
-PLOT
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Render Plotly plot
+// -----------------------------------------------------------------------------
+
 
 function renderPlot(players) {
 
-  const traces =
-    [
-      "GK",
-      "DF",
-      "MF",
-      "FW"
-    ]
+  const traces = [
 
-      .map(
-        position =>
-          makeTrace(
-            players,
-            position
-          )
-      )
+    "GK",
+    "DF",
+    "MF",
+    "FW"
 
-      .filter(
-        trace =>
-          trace.x.length > 0
-      );
+  ]
+
+    .map(
+
+      position =>
+        makeTrace(
+          players,
+          position
+        )
+
+    );
+
+
+  // Shared axis styling.
+  //
+  // showbackground = false:
+  // removes the large shaded 3D background planes
+  //
+  // showgrid = true:
+  // keeps the Cartesian grid
+
+  const axisCommon = {
+
+    color:
+      "#c7d0da",
+
+    showbackground:
+      false,
+
+    showgrid:
+      true,
+
+    gridcolor:
+      "#34404c",
+
+    zeroline:
+      true,
+
+    zerolinecolor:
+      "#66717d",
+
+    showline:
+      false
+
+  };
 
 
   const layout = {
@@ -1280,11 +1724,20 @@ function renderPlot(players) {
 
     margin: {
 
-      l: 0,
-      r: 0,
-      b: 0,
-      t: 20,
-      pad: 0
+      l:
+        0,
+
+      r:
+        0,
+
+      b:
+        0,
+
+      t:
+        20,
+
+      pad:
+        0
 
     },
 
@@ -1314,81 +1767,123 @@ function renderPlot(players) {
 
 
     scene: {
-        bgcolor: "#11151a",
 
-        xaxis: {
-            title: {
-            text: "Running / physical intensity"
-            },
+      bgcolor:
+        "#11151a",
 
-            color: "#c7d0da",
 
-            showbackground: false,
-            showgrid: true,
-            gridcolor: "#34404c",
+      // -----------------------------------------------------------------------
+      // X = Physical
+      // -----------------------------------------------------------------------
 
-            zeroline: true,
-            zerolinecolor: "#66717d",
+      xaxis: {
 
-            showline: false
+        ...axisCommon,
+
+        title: {
+
+          text:
+            "Physical intensity"
+
+        }
+
+      },
+
+
+      // -----------------------------------------------------------------------
+      // Y = Offense
+      // -----------------------------------------------------------------------
+
+      yaxis: {
+
+        ...axisCommon,
+
+        title: {
+
+          text:
+            "Offensive activity"
+
+        }
+
+      },
+
+
+      // -----------------------------------------------------------------------
+      // Z = Defense
+      // -----------------------------------------------------------------------
+
+      zaxis: {
+
+        ...axisCommon,
+
+        title: {
+
+          text:
+            "Defensive activity"
+
+        }
+
+      },
+
+
+      // -----------------------------------------------------------------------
+      // Camera
+      // -----------------------------------------------------------------------
+
+      camera: {
+
+        eye: {
+
+          x:
+            1.55,
+
+          y:
+            1.55,
+
+          z:
+            1.15
+
         },
 
-        yaxis: {
-            title: {
-            text: "Duel profile"
-            },
 
-            color: "#c7d0da",
+        // Keeps the Z direction upright.
 
-            showbackground: false,
-            showgrid: true,
-            gridcolor: "#34404c",
+        up: {
 
-            zeroline: true,
-            zerolinecolor: "#66717d",
+          x:
+            0,
 
-            showline: false
+          y:
+            0,
+
+          z:
+            1
+
         },
 
-        zaxis: {
-            title: {
-            text: "Defensive activity"
-            },
 
-            color: "#c7d0da",
+        // Orthographic avoids perspective distortion.
 
-            showbackground: false,
-            showgrid: true,
-            gridcolor: "#34404c",
+        projection: {
 
-            zeroline: true,
-            zerolinecolor: "#66717d",
+          type:
+            "orthographic"
 
-            showline: false
-        },
+        }
 
-        camera: {
-            eye: {
-            x: 1.55,
-            y: 1.55,
-            z: 1.15
-            },
+      },
 
-            up: {
-            x: 0,
-            y: 0,
-            z: 1
-            },
 
-            projection: {
-            type: "orthographic"
-            }
-        },
+      // Turntable prevents free roll / flipping of the whole plot.
 
-        dragmode: "turntable",
+      dragmode:
+        "turntable",
 
-        aspectmode: "cube"
-        },
+
+      aspectmode:
+        "cube"
+
+    },
 
 
     hoverlabel: {
@@ -1413,7 +1908,7 @@ function renderPlot(players) {
 
 
     uirevision:
-      "bundesliga-pca-2025-26"
+      "bundesliga-grouped-pca-2025-26"
 
   };
 
@@ -1447,35 +1942,45 @@ function renderPlot(players) {
 }
 
 
-/*
---------------------------------------------------
-STATUS
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Header status
+// -----------------------------------------------------------------------------
+
 
 function updateStatus(players) {
 
   const counts = {
 
-    GK: 0,
-    DF: 0,
-    MF: 0,
-    FW: 0
+    GK:
+      0,
+
+    DF:
+      0,
+
+    MF:
+      0,
+
+    FW:
+      0
 
   };
 
 
-  for (const player of players) {
+  for (
+    const player of players
+  ) {
 
     if (
+
       counts[
         player.positionGroup
       ] !== undefined
+
     ) {
 
       counts[
         player.positionGroup
-      ]++;
+      ] += 1;
 
     }
 
@@ -1483,6 +1988,7 @@ function updateStatus(players) {
 
 
   const statusElement =
+
     document.getElementById(
       "status"
     );
@@ -1508,15 +2014,15 @@ function updateStatus(players) {
 }
 
 
-/*
---------------------------------------------------
-ERROR
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Error display
+// -----------------------------------------------------------------------------
+
 
 function showError(message) {
 
   const chartElement =
+
     document.getElementById(
       "player-cloud"
     );
@@ -1536,6 +2042,7 @@ function showError(message) {
 
 
   const statusElement =
+
     document.getElementById(
       "status"
     );
@@ -1551,11 +2058,10 @@ function showError(message) {
 }
 
 
-/*
---------------------------------------------------
-LOAD DATA
---------------------------------------------------
-*/
+// -----------------------------------------------------------------------------
+// Load PCA data
+// -----------------------------------------------------------------------------
+
 
 function loadData() {
 
@@ -1596,10 +2102,13 @@ function loadData() {
 
 
         const headers =
-          results.meta.fields || [];
+
+          results.meta.fields
+          || [];
 
 
         const missingColumns =
+
           validateColumns(
             headers
           );
@@ -1618,11 +2127,15 @@ function loadData() {
             missingColumns
 
               .map(
+
                 column =>
                   `• ${column}`
+
               )
 
-              .join("<br>")
+              .join(
+                "<br>"
+              )
 
           );
 
@@ -1633,6 +2146,7 @@ function loadData() {
 
 
         ALL_PLAYERS =
+
           preparePlayers(
             results.data
           );
@@ -1643,8 +2157,11 @@ function loadData() {
         ) {
 
           showError(
-            "No valid PCA player rows were found."
+
+            "No valid grouped-PCA player rows were found."
+
           );
+
 
           return;
 
@@ -1667,8 +2184,11 @@ function loadData() {
 
 
         updateFilterStatus(
+
           false,
+
           ALL_PLAYERS.length
+
         );
 
       },
@@ -1685,7 +2205,11 @@ function loadData() {
 
           `Could not load "${CONFIG.csvFile}".<br><br>` +
 
-          "Make sure player_pca.csv is in the same folder as index.html."
+          "Make sure player_pca.csv is in the same folder as index.html.<br><br>" +
+
+          "For local testing run:<br>" +
+
+          "python -m http.server 8000"
 
         );
 

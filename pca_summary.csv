@@ -1,0 +1,4 @@
+axis,score_column,feature_count,explained_variance_pct
+Physical intensity,physical_score,6,79.34167089719074
+Offensive activity,offensive_score,8,47.34162388007107
+Defensive activity,defensive_score,6,36.69485351068009
