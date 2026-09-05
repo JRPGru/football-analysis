@@ -1,0 +1,8 @@
+pandas
+numpy
+soccerdata==1.9.1
+playwright
+rapidfuzz
+Unidecode
+lxml
+html5lib
