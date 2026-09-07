@@ -1,6 +1,11 @@
 "use strict";
 
 
+// =============================================================================
+// Configuration
+// =============================================================================
+
+
 const CONFIG = {
 
   manifestFile:
@@ -21,6 +26,11 @@ const CONFIG = {
 };
 
 
+// =============================================================================
+// Global state
+// =============================================================================
+
+
 let DATA_SOURCES = [];
 
 let CURRENT_SOURCE = null;
@@ -28,26 +38,37 @@ let CURRENT_SOURCE = null;
 let ALL_PLAYERS = [];
 
 let FILTER_STATE = {
-  positions: new Set(),
-  clubs: new Set(),
-  minAge: null,
-  maxAge: null
+
+  positions:
+    new Set(),
+
+  clubs:
+    new Set(),
+
+  minAge:
+    null,
+
+  maxAge:
+    null
+
 };
 
 
 // =============================================================================
-// Helpers
+// General helpers
 // =============================================================================
 
 
 function parseNumber(value) {
 
   const number = Number(
+
     String(
       value ?? ""
     )
-    .trim()
-    .replace(",", ".")
+      .trim()
+      .replace(",", ".")
+
   );
 
   return Number.isFinite(number)
@@ -98,6 +119,164 @@ function escapeAttribute(value) {
 
 
 // =============================================================================
+// PCA axis labels
+// =============================================================================
+
+
+function getAxisLabel(axis) {
+
+  const label =
+    CURRENT_SOURCE
+      ?.axis_labels
+      ?.[axis];
+
+  if (
+    label
+    && String(label).trim()
+  ) {
+
+    return String(label).trim();
+  }
+
+  return axis;
+}
+
+
+function readAxisLabelsFromCsv(rows) {
+
+  if (
+    !rows
+    || !rows.length
+  ) {
+
+    return {};
+  }
+
+
+  const firstRow =
+    rows[0];
+
+
+  const labels = {};
+
+
+  for (
+    const axis
+    of [
+      "PC1",
+      "PC2",
+      "PC3"
+    ]
+  ) {
+
+    const column =
+      `${axis}_label`;
+
+    const value =
+      String(
+        firstRow[column] ?? ""
+      ).trim();
+
+
+    if (
+      value
+      && value.toLowerCase() !== "nan"
+    ) {
+
+      labels[axis] =
+        value;
+    }
+  }
+
+
+  return labels;
+}
+
+
+function updateAxisLabelsFromCsv(
+  rows
+) {
+
+  const csvLabels =
+    readAxisLabelsFromCsv(
+      rows
+    );
+
+
+  CURRENT_SOURCE.axis_labels = {
+
+    ...(CURRENT_SOURCE.axis_labels ?? {}),
+
+    ...csvLabels
+
+  };
+}
+
+
+// =============================================================================
+// Dataset header
+// =============================================================================
+
+
+function updateDatasetHeader() {
+
+  if (!CURRENT_SOURCE) {
+    return;
+  }
+
+
+  const axis1 =
+    getAxisLabel(
+      "PC1"
+    );
+
+  const axis2 =
+    getAxisLabel(
+      "PC2"
+    );
+
+  const axis3 =
+    getAxisLabel(
+      "PC3"
+    );
+
+
+  const eyebrow =
+    document.getElementById(
+      "dataset-eyebrow"
+    );
+
+
+  if (eyebrow) {
+
+    eyebrow.textContent =
+      `${CURRENT_SOURCE.league_name} · ${CURRENT_SOURCE.season_label}`;
+  }
+
+
+  const subtitle =
+    document.querySelector(
+      ".subtitle"
+    );
+
+
+  if (subtitle) {
+
+    subtitle.textContent =
+      `${axis1} · ${axis2} · ${axis3}`;
+  }
+
+
+  document.title =
+    (
+      `${CURRENT_SOURCE.league_name} `
+      + `${CURRENT_SOURCE.season_label} — `
+      + "3D Player Profiles"
+    );
+}
+
+
+// =============================================================================
 // Player parsing
 // =============================================================================
 
@@ -105,6 +284,7 @@ function escapeAttribute(value) {
 function preparePlayers(rows) {
 
   return rows
+
     .map(
       row => ({
 
@@ -153,119 +333,34 @@ function preparePlayers(rows) {
             row.PC3
           ),
 
-        shootingGoalsPer90:
+        pc1ObservedFeatures:
           parseNumber(
-            row.shooting_goals_per90
+            row.PC1_observed_features
           ),
 
-        shotsPer90:
+        pc1ImputedFeatures:
           parseNumber(
-            row.shots_per90
+            row.PC1_imputed_features
           ),
 
-        shotsOnTargetPer90:
+        pc2ObservedFeatures:
           parseNumber(
-            row.shots_on_target_per90
+            row.PC2_observed_features
           ),
 
-        shotsOnTargetPct:
+        pc2ImputedFeatures:
           parseNumber(
-            row.shots_on_target_pct
+            row.PC2_imputed_features
           ),
 
-        goalsPerShot:
+        pc3ObservedFeatures:
           parseNumber(
-            row.goals_per_shot
+            row.PC3_observed_features
           ),
 
-        goalsPerShotOnTarget:
+        pc3ImputedFeatures:
           parseNumber(
-            row.goals_per_shot_on_target
-          ),
-
-        penaltiesScoredPer90:
-          parseNumber(
-            row.penalties_scored_per90
-          ),
-
-        penaltyAttemptsPer90:
-          parseNumber(
-            row.penalty_attempts_per90
-          ),
-
-        pointsPerMatch:
-          parseNumber(
-            row.points_per_match
-          ),
-
-        teamGoalsForPer90:
-          parseNumber(
-            row.team_goals_for_per90
-          ),
-
-        teamGoalsAgainstPer90:
-          parseNumber(
-            row.team_goals_against_per90
-          ),
-
-        plusMinusPer90:
-          parseNumber(
-            row.plus_minus_per90
-          ),
-
-        onOffPer90:
-          parseNumber(
-            row.on_off_per90
-          ),
-
-        yellowCardsPer90:
-          parseNumber(
-            row.yellow_cards_per90
-          ),
-
-        redCardsPer90:
-          parseNumber(
-            row.red_cards_per90
-          ),
-
-        secondYellowCardsPer90:
-          parseNumber(
-            row.second_yellow_cards_per90
-          ),
-
-        foulsCommittedPer90:
-          parseNumber(
-            row.fouls_committed_per90
-          ),
-
-        foulsDrawnPer90:
-          parseNumber(
-            row.fouls_drawn_per90
-          ),
-
-        offsidesPer90:
-          parseNumber(
-            row.offsides_per90
-          ),
-
-        crossesPer90:
-          parseNumber(
-            row.crosses_per90
-          ),
-
-        interceptionsPer90:
-          parseNumber(
-            row.interceptions_per90
-          ),
-
-        tacklesWonPer90:
-          parseNumber(
-            row.tackles_won_per90
-          ),
-
-        ownGoalsPer90:
-          parseNumber(
-            row.own_goals_per90
+            row.PC3_imputed_features
           ),
 
         observedFeatures:
@@ -277,12 +372,14 @@ function preparePlayers(rows) {
           parseNumber(
             row.imputed_features
           )
+
       })
     )
 
     .filter(
       player =>
         player.player
+
         && [
           "GK",
           "DF",
@@ -291,12 +388,15 @@ function preparePlayers(rows) {
         ].includes(
           player.positionGroup
         )
+
         && Number.isFinite(
           player.pc1
         )
+
         && Number.isFinite(
           player.pc2
         )
+
         && Number.isFinite(
           player.pc3
         )
@@ -305,7 +405,7 @@ function preparePlayers(rows) {
 
 
 // =============================================================================
-// League / season selectors
+// League selector
 // =============================================================================
 
 
@@ -313,6 +413,7 @@ function getLeagues() {
 
   const map =
     new Map();
+
 
   for (
     const source
@@ -332,21 +433,29 @@ function getLeagues() {
     }
   }
 
+
   return [
     ...map.entries()
   ]
-  .map(
-    ([id, name]) => ({
-      id,
-      name
-    })
-  )
-  .sort(
-    (a, b) =>
-      a.name.localeCompare(
-        b.name
-      )
-  );
+
+    .map(
+      (
+        [id, name]
+      ) => ({
+        id,
+        name
+      })
+    )
+
+    .sort(
+      (
+        a,
+        b
+      ) =>
+        a.name.localeCompare(
+          b.name
+        )
+    );
 }
 
 
@@ -355,12 +464,17 @@ function getSourcesForLeague(
 ) {
 
   return DATA_SOURCES
+
     .filter(
       source =>
         source.league === league
     )
+
     .sort(
-      (a, b) =>
+      (
+        a,
+        b
+      ) =>
         b.season.localeCompare(
           a.season
         )
@@ -375,25 +489,37 @@ function populateLeagueSelector() {
       "league-select"
     );
 
+
   const leagues =
     getLeagues();
 
+
   select.innerHTML =
     leagues
+
       .map(
         league => `
+
           <option
             value="${escapeAttribute(league.id)}"
           >
             ${escapeHtml(league.name)}
           </option>
+
         `
       )
+
       .join("");
+
 
   select.disabled =
     false;
 }
+
+
+// =============================================================================
+// Season selector
+// =============================================================================
 
 
 function populateSeasonSelector(
@@ -406,29 +532,38 @@ function populateSeasonSelector(
       "season-select"
     );
 
+
   const sources =
     getSourcesForLeague(
       league
     );
 
+
   select.innerHTML =
     sources
+
       .map(
         source => `
+
           <option
             value="${escapeAttribute(source.season)}"
           >
             ${escapeHtml(source.season_label)}
           </option>
+
         `
       )
+
       .join("");
+
 
   select.disabled =
     sources.length === 0;
 
+
   if (
     preferredSeason
+
     && sources.some(
       source =>
         source.season ===
@@ -439,6 +574,7 @@ function populateSeasonSelector(
     select.value =
       preferredSeason;
   }
+
 
   return sources;
 }
@@ -457,6 +593,11 @@ function findSource(
 }
 
 
+// =============================================================================
+// Dataset selector events
+// =============================================================================
+
+
 async function handleLeagueChange() {
 
   const league =
@@ -464,22 +605,28 @@ async function handleLeagueChange() {
       "league-select"
     ).value;
 
+
   const sources =
     populateSeasonSelector(
       league
     );
 
+
   if (!sources.length) {
+
     return;
   }
 
+
   const source =
     sources[0];
+
 
   document.getElementById(
     "season-select"
   ).value =
     source.season;
+
 
   await loadSource(
     source
@@ -494,16 +641,19 @@ async function handleSeasonChange() {
       "league-select"
     ).value;
 
+
   const season =
     document.getElementById(
       "season-select"
     ).value;
+
 
   const source =
     findSource(
       league,
       season
     );
+
 
   if (source) {
 
@@ -515,19 +665,26 @@ async function handleSeasonChange() {
 
 
 // =============================================================================
-// Clubs / filters
+// Clubs
 // =============================================================================
 
 
-function getPlayerClubs(player) {
+function getPlayerClubs(
+  player
+) {
 
   return player.team
+
     .split("/")
+
     .map(
       item =>
         item.trim()
     )
-    .filter(Boolean);
+
+    .filter(
+      Boolean
+    );
 }
 
 
@@ -536,6 +693,7 @@ function getAvailableClubs() {
   const clubs =
     new Set();
 
+
   for (
     const player
     of ALL_PLAYERS
@@ -543,23 +701,41 @@ function getAvailableClubs() {
 
     for (
       const club
-      of getPlayerClubs(player)
+      of getPlayerClubs(
+        player
+      )
     ) {
 
-      clubs.add(club);
+      clubs.add(
+        club
+      );
     }
   }
 
-  return [...clubs].sort(
-    (a, b) =>
-      a.localeCompare(b)
+
+  return [
+    ...clubs
+  ].sort(
+    (
+      a,
+      b
+    ) =>
+      a.localeCompare(
+        b
+      )
   );
 }
+
+
+// =============================================================================
+// Filters
+// =============================================================================
 
 
 function resetFilters() {
 
   FILTER_STATE = {
+
     positions:
       new Set(),
 
@@ -571,6 +747,7 @@ function resetFilters() {
 
     maxAge:
       null
+
   };
 }
 
@@ -578,31 +755,52 @@ function resetFilters() {
 function filtersActive() {
 
   return (
+
     FILTER_STATE.positions.size > 0
+
     || FILTER_STATE.clubs.size > 0
+
     || FILTER_STATE.minAge !== null
+
     || FILTER_STATE.maxAge !== null
+
   );
 }
 
 
-function playerMatches(player) {
+function playerMatches(
+  player
+) {
+
+  // --------------------------------------------------------------------------
+  // Position
+  // --------------------------------------------------------------------------
 
   if (
     FILTER_STATE.positions.size
+
     && !FILTER_STATE.positions.has(
       player.positionGroup
     )
   ) {
+
     return false;
   }
+
+
+  // --------------------------------------------------------------------------
+  // Club
+  // --------------------------------------------------------------------------
 
   if (
     FILTER_STATE.clubs.size
   ) {
 
     const match =
-      getPlayerClubs(player)
+      getPlayerClubs(
+        player
+      )
+
         .some(
           club =>
             FILTER_STATE.clubs.has(
@@ -610,39 +808,65 @@ function playerMatches(player) {
             )
         );
 
+
     if (!match) {
+
       return false;
     }
   }
+
+
+  // --------------------------------------------------------------------------
+  // Minimum age
+  // --------------------------------------------------------------------------
 
   if (
     FILTER_STATE.minAge !== null
   ) {
 
     if (
-      !Number.isFinite(player.age)
+      !Number.isFinite(
+        player.age
+      )
+
       || player.age <
         FILTER_STATE.minAge
     ) {
+
       return false;
     }
   }
+
+
+  // --------------------------------------------------------------------------
+  // Maximum age
+  // --------------------------------------------------------------------------
 
   if (
     FILTER_STATE.maxAge !== null
   ) {
 
     if (
-      !Number.isFinite(player.age)
+      !Number.isFinite(
+        player.age
+      )
+
       || player.age >
         FILTER_STATE.maxAge
     ) {
+
       return false;
     }
   }
 
+
   return true;
 }
+
+
+// =============================================================================
+// Filter panel
+// =============================================================================
 
 
 function createFilterPanel() {
@@ -652,43 +876,77 @@ function createFilterPanel() {
       "filter-panel"
     );
 
+
   const clubs =
     getAvailableClubs();
 
+
   const ages =
     ALL_PLAYERS
+
       .map(
         player =>
           player.age
       )
+
       .filter(
         Number.isFinite
       );
 
+
   const minAge =
     ages.length
+
       ? Math.floor(
-          Math.min(...ages)
+          Math.min(
+            ...ages
+          )
         )
+
       : 16;
+
 
   const maxAge =
     ages.length
+
       ? Math.ceil(
-          Math.max(...ages)
+          Math.max(
+            ...ages
+          )
         )
+
       : 45;
 
+
   const positions = [
-    ["GK", "Goalkeepers"],
-    ["DF", "Defenders"],
-    ["MF", "Midfielders"],
-    ["FW", "Forwards"]
+
+    [
+      "GK",
+      "Goalkeepers"
+    ],
+
+    [
+      "DF",
+      "Defenders"
+    ],
+
+    [
+      "MF",
+      "Midfielders"
+    ],
+
+    [
+      "FW",
+      "Forwards"
+    ]
+
   ];
+
 
   panel.innerHTML = `
 
     <div class="filter-grid">
+
 
       <div class="filter-section">
 
@@ -696,11 +954,19 @@ function createFilterPanel() {
           Position
         </div>
 
+
         <div class="filter-chip-list">
 
           ${positions
+
             .map(
-              ([code, label]) => `
+              (
+                [
+                  code,
+                  label
+                ]
+              ) => `
+
                 <label class="filter-chip">
 
                   <input
@@ -714,8 +980,10 @@ function createFilterPanel() {
                   </span>
 
                 </label>
+
               `
             )
+
             .join("")}
 
         </div>
@@ -729,11 +997,14 @@ function createFilterPanel() {
           Club
         </div>
 
+
         <div class="club-filter-list">
 
           ${clubs
+
             .map(
               club => `
+
                 <label class="filter-chip">
 
                   <input
@@ -747,8 +1018,10 @@ function createFilterPanel() {
                   </span>
 
                 </label>
+
               `
             )
+
             .join("")}
 
         </div>
@@ -762,9 +1035,11 @@ function createFilterPanel() {
           Age
         </div>
 
+
         <div class="age-filter">
 
           <label>
+
             Min
 
             <input
@@ -772,13 +1047,17 @@ function createFilterPanel() {
               type="number"
               placeholder="${minAge}"
             >
+
           </label>
+
 
           <span class="age-separator">
             to
           </span>
 
+
           <label>
+
             Max
 
             <input
@@ -786,11 +1065,13 @@ function createFilterPanel() {
               type="number"
               placeholder="${maxAge}"
             >
+
           </label>
 
         </div>
 
       </div>
+
 
     </div>
 
@@ -798,9 +1079,12 @@ function createFilterPanel() {
     <div class="filter-footer">
 
       <div id="filter-result-count">
+
         No filters active ·
         ${ALL_PLAYERS.length} players
+
       </div>
+
 
       <button
         id="clear-filters"
@@ -810,15 +1094,20 @@ function createFilterPanel() {
       </button>
 
     </div>
+
   `;
+
 
   panel.hidden =
     false;
 
+
   document
+
     .querySelectorAll(
       ".position-filter, .club-filter"
     )
+
     .forEach(
       input =>
         input.addEventListener(
@@ -827,28 +1116,37 @@ function createFilterPanel() {
         )
     );
 
+
   document
+
     .getElementById(
       "age-min"
     )
+
     .addEventListener(
       "input",
       readFilters
     );
 
+
   document
+
     .getElementById(
       "age-max"
     )
+
     .addEventListener(
       "input",
       readFilters
     );
 
+
   document
+
     .getElementById(
       "clear-filters"
     )
+
     .addEventListener(
       "click",
       clearFilters
@@ -860,49 +1158,69 @@ function readFilters() {
 
   FILTER_STATE.positions =
     new Set(
+
       [
         ...document.querySelectorAll(
           ".position-filter:checked"
         )
       ]
-      .map(
-        item =>
-          item.value
-      )
+
+        .map(
+          item =>
+            item.value
+        )
+
     );
+
 
   FILTER_STATE.clubs =
     new Set(
+
       [
         ...document.querySelectorAll(
           ".club-filter:checked"
         )
       ]
-      .map(
-        item =>
-          item.value
-      )
+
+        .map(
+          item =>
+            item.value
+        )
+
     );
+
 
   const min =
     document.getElementById(
       "age-min"
     ).value;
 
+
   const max =
     document.getElementById(
       "age-max"
     ).value;
 
+
   FILTER_STATE.minAge =
     min === ""
+
       ? null
-      : Number(min);
+
+      : Number(
+          min
+        );
+
 
   FILTER_STATE.maxAge =
     max === ""
+
       ? null
-      : Number(max);
+
+      : Number(
+          max
+        );
+
 
   updatePlotFilters();
 }
@@ -918,13 +1236,20 @@ function clearFilters() {
 }
 
 
+// =============================================================================
+// Plot filtering
+// =============================================================================
+
+
 function updatePlotFilters() {
 
   const active =
     filtersActive();
 
+
   let matches =
     0;
+
 
   [
     "GK",
@@ -932,70 +1257,100 @@ function updatePlotFilters() {
     "MF",
     "FW"
   ]
-  .forEach(
-    (
-      position,
-      traceIndex
-    ) => {
 
-      const group =
-        ALL_PLAYERS.filter(
-          player =>
-            player.positionGroup ===
-            position
-        );
+    .forEach(
+      (
+        position,
+        traceIndex
+      ) => {
 
-      const colors =
-        group.map(
-          player => {
 
-            const match =
-              !active
-              || playerMatches(
-                player
-              );
+        const group =
+          ALL_PLAYERS.filter(
+            player =>
+              player.positionGroup ===
+              position
+          );
 
-            if (match) {
 
-              matches += 1;
+        const colors =
+          group.map(
+            player => {
 
-              return CONFIG.colors[
-                position
-              ];
+
+              const match =
+                (
+                  !active
+
+                  || playerMatches(
+                    player
+                  )
+                );
+
+
+              if (match) {
+
+                matches += 1;
+
+
+                return CONFIG.colors[
+                  position
+                ];
+              }
+
+
+              return CONFIG.inactiveColor;
             }
+          );
 
-            return CONFIG.inactiveColor;
-          }
+
+        Plotly.restyle(
+
+          "player-cloud",
+
+          {
+            "marker.color":
+              [
+                colors
+              ]
+          },
+
+          [
+            traceIndex
+          ]
+
         );
+      }
+    );
 
-      Plotly.restyle(
-        "player-cloud",
-        {
-          "marker.color":
-            [colors]
-        },
-        [traceIndex]
-      );
-    }
-  );
 
   const counter =
     document.getElementById(
       "filter-result-count"
     );
 
+
   if (counter) {
 
     counter.textContent =
       active
-        ? `${matches} of ${ALL_PLAYERS.length} players match`
-        : `No filters active · ${ALL_PLAYERS.length} players`;
+
+        ? (
+            `${matches} of `
+            + `${ALL_PLAYERS.length} `
+            + "players match"
+          )
+
+        : (
+            "No filters active · "
+            + `${ALL_PLAYERS.length} players`
+          );
   }
 }
 
 
 // =============================================================================
-// Plot
+// Plot traces
 // =============================================================================
 
 
@@ -1010,6 +1365,25 @@ function makeTrace(
         position
     );
 
+
+  const pc1Label =
+    getAxisLabel(
+      "PC1"
+    );
+
+
+  const pc2Label =
+    getAxisLabel(
+      "PC2"
+    );
+
+
+  const pc3Label =
+    getAxisLabel(
+      "PC3"
+    );
+
+
   return {
 
     type:
@@ -1021,11 +1395,13 @@ function makeTrace(
     name:
       position,
 
+
     x:
       group.map(
         player =>
           player.pc1
       ),
+
 
     y:
       group.map(
@@ -1033,11 +1409,13 @@ function makeTrace(
           player.pc2
       ),
 
+
     z:
       group.map(
         player =>
           player.pc3
       ),
+
 
     text:
       group.map(
@@ -1045,70 +1423,45 @@ function makeTrace(
           player.player
       ),
 
+
     customdata:
       group.map(
         player => [
 
           player.team,
+
           player.position,
-          formatInteger(player.age),
-          formatInteger(player.minutes),
 
-          formatNumber(
-            player.shootingGoalsPer90
+          formatInteger(
+            player.age
           ),
 
-          formatNumber(
-            player.shotsPer90
+          formatInteger(
+            player.minutes
           ),
 
-          formatNumber(
-            player.shotsOnTargetPer90
+          formatInteger(
+            player.pc1ObservedFeatures
           ),
 
-          formatNumber(
-            player.shotsOnTargetPct,
-            1
+          formatInteger(
+            player.pc1ImputedFeatures
           ),
 
-          formatNumber(
-            player.goalsPerShot
+          formatInteger(
+            player.pc2ObservedFeatures
           ),
 
-          formatNumber(
-            player.goalsPerShotOnTarget
+          formatInteger(
+            player.pc2ImputedFeatures
           ),
 
-          formatNumber(
-            player.pointsPerMatch
+          formatInteger(
+            player.pc3ObservedFeatures
           ),
 
-          formatNumber(
-            player.plusMinusPer90
-          ),
-
-          formatNumber(
-            player.onOffPer90
-          ),
-
-          formatNumber(
-            player.foulsCommittedPer90
-          ),
-
-          formatNumber(
-            player.foulsDrawnPer90
-          ),
-
-          formatNumber(
-            player.crossesPer90
-          ),
-
-          formatNumber(
-            player.interceptionsPer90
-          ),
-
-          formatNumber(
-            player.tacklesWonPer90
+          formatInteger(
+            player.pc3ImputedFeatures
           ),
 
           formatInteger(
@@ -1118,8 +1471,10 @@ function makeTrace(
           formatInteger(
             player.imputedFeatures
           )
+
         ]
       ),
+
 
     marker: {
 
@@ -1135,98 +1490,145 @@ function makeTrace(
         0.92,
 
       line: {
-        width: 0.3,
+
+        width:
+          0.3,
+
         color:
           "rgba(255,255,255,.55)"
+
       }
+
     },
+
 
     hovertemplate:
 
-      "<b>%{text}</b><br>" +
+      "<b>%{text}</b><br>"
 
-      "%{customdata[0]} · %{customdata[1]}<br>" +
+      +
 
-      "Age: %{customdata[2]}<br>" +
+      "%{customdata[0]} · %{customdata[1]}<br>"
 
-      "Minutes: %{customdata[3]}<br><br>" +
+      +
 
+      "Age: %{customdata[2]}<br>"
 
-      "<b>PCA</b><br>" +
+      +
 
-      "Shooting: %{x:.2f}<br>" +
-
-      "Team success: %{y:.2f}<br>" +
-
-      "Misc performance: %{z:.2f}<br><br>" +
+      "Minutes: %{customdata[3]}<br><br>"
 
 
-      "<b>Shooting</b><br>" +
+      +
 
-      "Goals / 90: %{customdata[4]}<br>" +
+      "<b>PCA profile</b><br>"
 
-      "Shots / 90: %{customdata[5]}<br>" +
+      +
 
-      "Shots on target / 90: %{customdata[6]}<br>" +
+      `${pc1Label}: %{x:.2f}<br>`
 
-      "Shots on target: %{customdata[7]}%<br>" +
+      +
 
-      "Goals / shot: %{customdata[8]}<br>" +
+      `${pc2Label}: %{y:.2f}<br>`
 
-      "Goals / SOT: %{customdata[9]}<br><br>" +
+      +
 
-
-      "<b>Team success</b><br>" +
-
-      "Points / match: %{customdata[10]}<br>" +
-
-      "+/- / 90: %{customdata[11]}<br>" +
-
-      "On-Off / 90: %{customdata[12]}<br><br>" +
+      `${pc3Label}: %{z:.2f}<br><br>`
 
 
-      "<b>Misc</b><br>" +
+      +
 
-      "Fouls committed / 90: %{customdata[13]}<br>" +
+      "<b>Data quality</b><br>"
 
-      "Fouls drawn / 90: %{customdata[14]}<br>" +
+      +
 
-      "Crosses / 90: %{customdata[15]}<br>" +
+      `${pc1Label}: %{customdata[4]} observed, %{customdata[5]} imputed<br>`
 
-      "Interceptions / 90: %{customdata[16]}<br>" +
+      +
 
-      "Tackles won / 90: %{customdata[17]}<br><br>" +
+      `${pc2Label}: %{customdata[6]} observed, %{customdata[7]} imputed<br>`
 
+      +
 
-      "Observed PCA metrics: %{customdata[18]}<br>" +
+      `${pc3Label}: %{customdata[8]} observed, %{customdata[9]} imputed<br>`
 
-      "Imputed PCA metrics: %{customdata[19]}" +
+      +
+
+      "Overall: %{customdata[10]} observed, %{customdata[11]} imputed"
+
+      +
 
       "<extra></extra>"
+
   };
 }
+
+
+// =============================================================================
+// Plot
+// =============================================================================
 
 
 async function renderPlot() {
 
   const traces = [
+
     "GK",
+
     "DF",
+
     "MF",
+
     "FW"
+
   ].map(
     makeTrace
   );
 
+
   const axisCommon = {
-    color: "#c7d0da",
-    showbackground: false,
-    showgrid: true,
-    gridcolor: "#34404c",
-    zeroline: true,
-    zerolinecolor: "#66717d",
-    showline: false
+
+    color:
+      "#c7d0da",
+
+    showbackground:
+      false,
+
+    showgrid:
+      true,
+
+    gridcolor:
+      "#34404c",
+
+    zeroline:
+      true,
+
+    zerolinecolor:
+      "#66717d",
+
+    showline:
+      false
+
   };
+
+
+  const pc1Label =
+    getAxisLabel(
+      "PC1"
+    );
+
+
+  const pc2Label =
+    getAxisLabel(
+      "PC2"
+    );
+
+
+  const pc3Label =
+    getAxisLabel(
+      "PC3"
+    );
+
 
   const layout = {
 
@@ -1236,101 +1638,196 @@ async function renderPlot() {
     plot_bgcolor:
       "#11151a",
 
+
     font: {
-      color: "#e9eef5",
+
+      color:
+        "#e9eef5",
+
       family:
         "Inter, system-ui, sans-serif"
+
     },
 
+
     margin: {
-      l: 0,
-      r: 0,
-      b: 0,
-      t: 20
+
+      l:
+        0,
+
+      r:
+        0,
+
+      b:
+        0,
+
+      t:
+        20
+
     },
+
 
     scene: {
 
       bgcolor:
         "#11151a",
 
+
+      // -----------------------------------------------------------------------
+      // X = PC1
+      // -----------------------------------------------------------------------
+
       xaxis: {
+
         ...axisCommon,
 
         title: {
+
           text:
-            "Shooting profile (PC1)"
+            pc1Label
+
         }
+
       },
+
+
+      // -----------------------------------------------------------------------
+      // Y = PC2
+      // -----------------------------------------------------------------------
 
       yaxis: {
+
         ...axisCommon,
 
         title: {
+
           text:
-            "Team success (PC2)"
+            pc2Label
+
         }
+
       },
+
+
+      // -----------------------------------------------------------------------
+      // Z = PC3
+      // -----------------------------------------------------------------------
 
       zaxis: {
+
         ...axisCommon,
 
         title: {
+
           text:
-            "Misc performance (PC3)"
+            pc3Label
+
         }
+
       },
+
 
       camera: {
 
         eye: {
-          x: 1.55,
-          y: 1.55,
-          z: 1.15
+
+          x:
+            1.55,
+
+          y:
+            1.55,
+
+          z:
+            1.15
+
         },
+
 
         up: {
-          x: 0,
-          y: 0,
-          z: 1
+
+          x:
+            0,
+
+          y:
+            0,
+
+          z:
+            1
+
         },
 
+
         projection: {
+
           type:
             "orthographic"
+
         }
+
       },
+
 
       dragmode:
         "turntable",
 
+
       aspectmode:
         "cube"
+
     },
+
 
     hoverlabel: {
-      bgcolor: "#0b0d10",
-      bordercolor: "#40505f",
+
+      bgcolor:
+        "#0b0d10",
+
+      bordercolor:
+        "#40505f",
+
       font: {
-        color: "#fff",
-        size: 13
+
+        color:
+          "#ffffff",
+
+        size:
+          13
+
       }
+
     },
 
+
     uirevision:
-      CURRENT_SOURCE?.id
-      ?? "pca"
+      (
+        CURRENT_SOURCE?.id
+        ?? "pca"
+      )
+
   };
 
+
   await Plotly.newPlot(
+
     "player-cloud",
+
     traces,
+
     layout,
+
     {
-      responsive: true,
-      displaylogo: false,
-      scrollZoom: true
+
+      responsive:
+        true,
+
+      displaylogo:
+        false,
+
+      scrollZoom:
+        true
+
     }
+
   );
 }
 
@@ -1340,7 +1837,9 @@ async function renderPlot() {
 // =============================================================================
 
 
-function parseCsv(url) {
+function parseCsv(
+  url
+) {
 
   return new Promise(
     (
@@ -1348,8 +1847,11 @@ function parseCsv(url) {
       reject
     ) => {
 
+
       Papa.parse(
+
         url,
+
         {
 
           download:
@@ -1361,69 +1863,220 @@ function parseCsv(url) {
           skipEmptyLines:
             true,
 
+
           complete:
             resolve,
 
+
           error:
             reject
+
         }
+
       );
+
     }
   );
 }
 
 
-async function loadSource(source) {
+// =============================================================================
+// Dataset loading
+// =============================================================================
+
+
+async function loadSource(
+  source
+) {
 
   CURRENT_SOURCE =
     source;
 
+
   resetFilters();
+
 
   const status =
     document.getElementById(
       "status"
     );
 
+
+  const filterPanel =
+    document.getElementById(
+      "filter-panel"
+    );
+
+
+  if (filterPanel) {
+
+    filterPanel.hidden =
+      true;
+
+    filterPanel.innerHTML =
+      "";
+  }
+
+
   status.textContent =
-    `Loading ${source.league_name} · ${source.season_label}…`;
+    (
+      `Loading ${source.league_name}`
+      + ` · ${source.season_label}…`
+    );
+
 
   const result =
     await parseCsv(
-      `${source.path}?v=${encodeURIComponent(source.modified)}`
+
+      `${source.path}?v=${
+        encodeURIComponent(
+          source.modified ?? Date.now()
+        )
+      }`
+
     );
+
+
+  if (
+    !result.data
+    || !result.data.length
+  ) {
+
+    throw new Error(
+
+      `No player data found for `
+      + `${source.league_name} `
+      + `${source.season_label}.`
+
+    );
+  }
+
+
+  // --------------------------------------------------------------------------
+  // Axis labels
+  // --------------------------------------------------------------------------
+  //
+  // Primary source:
+  //     data_sources.json -> source.axis_labels
+  //
+  // Fallback:
+  //     PC1_label / PC2_label / PC3_label in the PCA CSV
+  //
+  // --------------------------------------------------------------------------
+
+  updateAxisLabelsFromCsv(
+    result.data
+  );
+
+
+  // --------------------------------------------------------------------------
+  // Players
+  // --------------------------------------------------------------------------
 
   ALL_PLAYERS =
     preparePlayers(
       result.data
     );
 
+
+  if (!ALL_PLAYERS.length) {
+
+    throw new Error(
+
+      `No valid PCA player rows found for `
+      + `${source.league_name} `
+      + `${source.season_label}.`
+
+    );
+  }
+
+
+  // --------------------------------------------------------------------------
+  // Update page text
+  // --------------------------------------------------------------------------
+
+  updateDatasetHeader();
+
+
+  // --------------------------------------------------------------------------
+  // Rebuild filters
+  // --------------------------------------------------------------------------
+
   createFilterPanel();
+
+
+  // --------------------------------------------------------------------------
+  // Draw plot
+  // --------------------------------------------------------------------------
 
   await renderPlot();
 
-  document.getElementById(
-    "dataset-eyebrow"
-  ).textContent =
-    `${source.league_name} · ${source.season_label}`;
+
+  // --------------------------------------------------------------------------
+  // Position counts
+  // --------------------------------------------------------------------------
+
+  const positionCounts = {
+
+    GK:
+      0,
+
+    DF:
+      0,
+
+    MF:
+      0,
+
+    FW:
+      0
+
+  };
+
+
+  for (
+    const player
+    of ALL_PLAYERS
+  ) {
+
+    positionCounts[
+      player.positionGroup
+    ] += 1;
+  }
+
 
   status.textContent =
-    `${source.league_name} · ${source.season_label} · ${ALL_PLAYERS.length} players`;
+    (
+      `${source.league_name}`
+      + ` · ${source.season_label}`
+      + ` · ${ALL_PLAYERS.length} players`
+      + ` · ${positionCounts.GK} GK`
+      + ` · ${positionCounts.DF} DF`
+      + ` · ${positionCounts.MF} MF`
+      + ` · ${positionCounts.FW} FW`
+    );
+
+
+  // --------------------------------------------------------------------------
+  // Store selected dataset in URL
+  // --------------------------------------------------------------------------
 
   const url =
     new URL(
       window.location.href
     );
 
+
   url.searchParams.set(
     "league",
     source.league
   );
 
+
   url.searchParams.set(
     "season",
     source.season
   );
+
 
   history.replaceState(
     {},
@@ -1434,7 +2087,7 @@ async function loadSource(source) {
 
 
 // =============================================================================
-// Manifest
+// Manifest loading
 // =============================================================================
 
 
@@ -1442,55 +2095,83 @@ async function loadManifest() {
 
   const response =
     await fetch(
+
       `${CONFIG.manifestFile}?v=${Date.now()}`,
+
       {
+
         cache:
           "no-store"
+
       }
+
     );
+
 
   if (!response.ok) {
 
     throw new Error(
+
       `Could not load ${CONFIG.manifestFile}`
+
     );
   }
+
 
   const manifest =
     await response.json();
 
+
   DATA_SOURCES =
     manifest.sources ?? [];
+
 
   if (!DATA_SOURCES.length) {
 
     throw new Error(
+
       "No prepared PCA datasets found."
+
     );
   }
 
+
+  // --------------------------------------------------------------------------
+  // League selector
+  // --------------------------------------------------------------------------
+
   populateLeagueSelector();
+
+
+  // --------------------------------------------------------------------------
+  // Read requested source from URL
+  // --------------------------------------------------------------------------
 
   const params =
     new URLSearchParams(
       window.location.search
     );
 
+
   const requestedLeague =
     params.get(
       "league"
     );
+
 
   const requestedSeason =
     params.get(
       "season"
     );
 
+
   const leagues =
     getLeagues();
 
+
   let initialLeague =
     requestedLeague;
+
 
   if (
     !leagues.some(
@@ -1504,16 +2185,36 @@ async function loadManifest() {
       leagues[0].id;
   }
 
+
   document.getElementById(
     "league-select"
   ).value =
     initialLeague;
 
+
+  // --------------------------------------------------------------------------
+  // Season selector
+  // --------------------------------------------------------------------------
+
   const sources =
     populateSeasonSelector(
+
       initialLeague,
+
       requestedSeason
+
     );
+
+
+  if (!sources.length) {
+
+    throw new Error(
+
+      `No prepared seasons found for ${initialLeague}.`
+
+    );
+  }
+
 
   let initialSource =
     sources.find(
@@ -1522,34 +2223,115 @@ async function loadManifest() {
         requestedSeason
     );
 
+
   if (!initialSource) {
 
     initialSource =
       sources[0];
   }
 
+
   document.getElementById(
     "season-select"
   ).value =
     initialSource.season;
 
-  document.getElementById(
-    "league-select"
-  ).addEventListener(
-    "change",
-    handleLeagueChange
-  );
 
-  document.getElementById(
-    "season-select"
-  ).addEventListener(
-    "change",
-    handleSeasonChange
-  );
+  // --------------------------------------------------------------------------
+  // Events
+  // --------------------------------------------------------------------------
+
+  document
+
+    .getElementById(
+      "league-select"
+    )
+
+    .addEventListener(
+      "change",
+      handleLeagueChange
+    );
+
+
+  document
+
+    .getElementById(
+      "season-select"
+    )
+
+    .addEventListener(
+      "change",
+      handleSeasonChange
+    );
+
+
+  // --------------------------------------------------------------------------
+  // Initial dataset
+  // --------------------------------------------------------------------------
 
   await loadSource(
     initialSource
   );
+}
+
+
+// =============================================================================
+// Error display
+// =============================================================================
+
+
+function showError(
+  error
+) {
+
+  console.error(
+    error
+  );
+
+
+  const message =
+    (
+      error instanceof Error
+    )
+
+      ? error.message
+
+      : String(
+          error
+        );
+
+
+  const status =
+    document.getElementById(
+      "status"
+    );
+
+
+  if (status) {
+
+    status.textContent =
+      message;
+  }
+
+
+  const chart =
+    document.getElementById(
+      "player-cloud"
+    );
+
+
+  if (chart) {
+
+    chart.innerHTML = `
+
+      <div class="error">
+
+        ${escapeHtml(message)}
+
+      </div>
+
+    `;
+  }
 }
 
 
@@ -1559,16 +2341,7 @@ async function loadManifest() {
 
 
 loadManifest()
+
   .catch(
-    error => {
-
-      console.error(
-        error
-      );
-
-      document.getElementById(
-        "status"
-      ).textContent =
-        error.message;
-    }
+    showError
   );
