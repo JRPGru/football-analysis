@@ -74,7 +74,6 @@ PCA_GROUPS = [
             "fbref_shooting_standard_sotpct",
             "fbref_shooting_standard_g_per_sh",
             "fbref_shooting_standard_g_per_sot",
-            "fbref_playing_time_team_success_ong",
         ],
     },
 
