@@ -1,4 +1,10 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -6,18 +12,24 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
+from unidecode import unidecode
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Project paths
+# =============================================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+DATA_DIRECTORY = PROJECT_ROOT / "data"
+VIZ_DIRECTORY = PROJECT_ROOT / "Viz"
+MANIFEST_FILE = VIZ_DIRECTORY / "data_sources.json"
+
+
+# =============================================================================
 # Configuration
-# -----------------------------------------------------------------------------
+# =============================================================================
 
-INPUT_FILE = Path("bundesliga_2025_26_all_players.csv")
-OUTPUT_FILE = Path("player_pca.csv")
-LOADINGS_FILE = Path("pca_loadings.csv")
-SUMMARY_FILE = Path("pca_summary.csv")
-
-# Strictly more than this number of minutes.
 MIN_MINUTES = 400
 
 MINUTES_COLUMN = "fbref_standard_playing_time_min"
@@ -25,174 +37,440 @@ POSITION_COLUMN = "fbref_standard_pos"
 AGE_COLUMN = "fbref_standard_age"
 
 
-# -----------------------------------------------------------------------------
-# Feature groups
-# -----------------------------------------------------------------------------
-#
-# The three visual axes are calculated independently:
-#   X = Physical intensity PCA
-#   Y = Offensive activity PCA
-#   Z = Defensive activity PCA
-#
-# Position is NOT used in any PCA calculation. It is only used for colouring
-# and filtering in the browser.
-#
-# All season-count features are converted to per-90 values before PCA.
-# Top speed is already a maximum/rate-like value and is therefore not divided
-# by minutes.
+# =============================================================================
+# PCA features
+# =============================================================================
 
-PHYSICAL_FEATURES = [
-    "distance_per90",
-    "sprints_per90",
-    "intensive_runs_per90",
-    "top_speed_kmh",
-    "sprints_per_km",
-    "intensive_runs_per_km",
-]
-
-OFFENSIVE_FEATURES = [
-    "goals_per90",
-    "assists_per90",
+PCA1_FEATURES = [
+    "shooting_goals_per90",
     "shots_per90",
     "shots_on_target_per90",
-    "crosses_per90",
-    "fouls_drawn_per90",
-    "offsides_per90",
+    "shots_on_target_pct",
+    "goals_per_shot",
+    "goals_per_shot_on_target",
+    "penalties_scored_per90",
     "penalty_attempts_per90",
 ]
 
-DEFENSIVE_FEATURES = [
-    "duels_won_per90",
-    "aerial_duels_won_per90",
-    "tackles_won_per90",
-    "interceptions_per90",
-    "fouls_committed_per90",
-    "yellow_cards_per90",
+
+PCA2_FEATURES = [
+    "points_per_match",
+    "team_goals_for_per90",
+    "team_goals_against_per90",
+    "plus_minus_per90",
+    "on_off_per90",
 ]
 
 
-# FBref player counts: summed across rows/clubs, then converted to per 90.
-FBREF_COUNT_FEATURES = {
-    # Offense
-    "goals_per90": "fbref_standard_performance_gls",
-    "assists_per90": "fbref_standard_performance_ast",
-    "shots_per90": "fbref_shooting_standard_sh",
-    "shots_on_target_per90": "fbref_shooting_standard_sot",
-    "crosses_per90": "fbref_misc_performance_crs",
-    "fouls_drawn_per90": "fbref_misc_performance_fld",
-    "offsides_per90": "fbref_misc_performance_off",
-    "penalty_attempts_per90": "fbref_standard_performance_pkatt",
+PCA3_FEATURES = [
+    "yellow_cards_per90",
+    "red_cards_per90",
+    "second_yellow_cards_per90",
+    "fouls_committed_per90",
+    "fouls_drawn_per90",
+    "offsides_per90",
+    "crosses_per90",
+    "interceptions_per90",
+    "tackles_won_per90",
+    "own_goals_per90",
+]
 
-    # Defense
-    "tackles_won_per90": "fbref_misc_performance_tklw",
-    "interceptions_per90": "fbref_misc_performance_int",
-    "fouls_committed_per90": "fbref_misc_performance_fls",
-    "yellow_cards_per90": "fbref_misc_performance_crdy",
+
+# =============================================================================
+# Source columns
+# =============================================================================
+
+SHOOTING_COLUMNS = {
+    "goals":
+        "fbref_shooting_standard_gls",
+
+    "shots":
+        "fbref_shooting_standard_sh",
+
+    "shots_on_target":
+        "fbref_shooting_standard_sot",
+
+    "penalties_scored":
+        "fbref_shooting_standard_pk",
+
+    "penalty_attempts":
+        "fbref_shooting_standard_pkatt",
 }
 
 
-# Bundesliga season totals. These are player-level values, so if a player has
-# multiple FBref rows we take the first available value rather than summing a
-# duplicated Bundesliga value across rows.
-BUNDESLIGA_TOTAL_FEATURES = {
-    # Physical
-    "distance_per90": "bundesliga_distance_km",
-    "sprints_per90": "bundesliga_sprints",
-    "intensive_runs_per90": "bundesliga_intensive_runs",
+TEAM_SUCCESS_COLUMNS = {
+    "points_per_match":
+        "fbref_playing_time_team_success_ppm",
 
-    # Defense
-    "duels_won_per90": "bundesliga_duels_won",
-    "aerial_duels_won_per90": "bundesliga_aerial_duels_won",
+    "goals_for":
+        "fbref_playing_time_team_success_ong",
+
+    "goals_against":
+        "fbref_playing_time_team_success_onga",
+
+    "plus_minus":
+        "fbref_playing_time_team_success_plus_minus",
+
+    "on_off":
+        "fbref_playing_time_team_success_on_off",
 }
 
 
-# Bundesliga maximum / rate-like features.
-BUNDESLIGA_MAX_FEATURES = {
-    "top_speed_kmh": "bundesliga_top_speed_kmh",
+MISC_COLUMNS = {
+    "yellow_cards":
+        "fbref_misc_performance_crdy",
+
+    "red_cards":
+        "fbref_misc_performance_crdr",
+
+    "second_yellow_cards":
+        "fbref_misc_performance_2crdy",
+
+    "fouls_committed":
+        "fbref_misc_performance_fls",
+
+    "fouls_drawn":
+        "fbref_misc_performance_fld",
+
+    "offsides":
+        "fbref_misc_performance_off",
+
+    "crosses":
+        "fbref_misc_performance_crs",
+
+    "interceptions":
+        "fbref_misc_performance_int",
+
+    "tackles_won":
+        "fbref_misc_performance_tklw",
+
+    "own_goals":
+        "fbref_misc_performance_og",
 }
 
 
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
+# =============================================================================
+# CLI
+# =============================================================================
+
+
+def parse_arguments():
+
+    parser = argparse.ArgumentParser(
+        description="Prepare grouped PCA data from FBref statistics."
+    )
+
+    parser.add_argument(
+        "--league",
+        required=True,
+        help='Example: "GER-Bundesliga"',
+    )
+
+    parser.add_argument(
+        "--season",
+        required=True,
+        help='Example: "2025-2026"',
+    )
+
+    return parser.parse_args()
+
+
+# =============================================================================
+# Naming helpers
+# =============================================================================
+
+
+def league_directory_name(league: str) -> str:
+
+    league = league.strip()
+
+    if "-" in league:
+        league = league.split("-", 1)[1]
+
+    league = unidecode(league).lower()
+
+    league = re.sub(
+        r"[^a-z0-9]+",
+        "_",
+        league,
+    )
+
+    return league.strip("_")
+
+
+def league_display_name(league: str) -> str:
+
+    league = league.strip()
+
+    if re.match(
+        r"^[A-Z]{3}-",
+        league,
+    ):
+        return league.split("-", 1)[1]
+
+    return league
+
+
+def season_filename_token(season: str) -> str:
+
+    season = season.strip()
+
+    match = re.fullmatch(
+        r"(\d{4})-(\d{4})",
+        season,
+    )
+
+    if match:
+        return (
+            f"{match.group(1)}_"
+            f"{match.group(2)[-2:]}"
+        )
+
+    return re.sub(
+        r"[^A-Za-z0-9]+",
+        "_",
+        season,
+    ).strip("_")
+
+
+def season_display_name(season: str) -> str:
+
+    match = re.fullmatch(
+        r"(\d{4})-(\d{4})",
+        season.strip(),
+    )
+
+    if match:
+        return (
+            f"{match.group(1)}/"
+            f"{match.group(2)[-2:]}"
+        )
+
+    return season
+
+
+# =============================================================================
+# Numeric helpers
+# =============================================================================
 
 
 def numeric(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series, errors="coerce")
+
+    return pd.to_numeric(
+        series,
+        errors="coerce",
+    )
 
 
-def first_numeric_value(series: pd.Series):
-    values = numeric(series).dropna()
-    if values.empty:
+def safe_per90(
+    value,
+    minutes,
+):
+
+    if (
+        pd.isna(value)
+        or minutes <= 0
+    ):
         return np.nan
-    return values.iloc[0]
+
+    return (
+        float(value)
+        * 90
+        / float(minutes)
+    )
 
 
-def max_numeric_value(series: pd.Series):
-    values = numeric(series).dropna()
-    if values.empty:
+def safe_ratio(
+    numerator,
+    denominator,
+):
+
+    if (
+        pd.isna(numerator)
+        or pd.isna(denominator)
+        or float(denominator) <= 0
+    ):
         return np.nan
-    return values.max()
+
+    return (
+        float(numerator)
+        / float(denominator)
+    )
+
+
+def safe_percentage(
+    numerator,
+    denominator,
+):
+
+    value = safe_ratio(
+        numerator,
+        denominator,
+    )
+
+    return (
+        value * 100
+        if pd.notna(value)
+        else np.nan
+    )
+
+
+def weighted_average(
+    values,
+    weights,
+):
+
+    values = numeric(values)
+    weights = numeric(weights)
+
+    valid = (
+        values.notna()
+        & weights.notna()
+        & (weights > 0)
+    )
+
+    if not valid.any():
+        return np.nan
+
+    return float(
+        np.average(
+            values[valid],
+            weights=weights[valid],
+        )
+    )
+
+
+# =============================================================================
+# Position
+# =============================================================================
 
 
 def classify_position(position):
+
     if pd.isna(position):
         return None
 
-    primary = re.split(r"[,\s/;-]+", str(position).upper().strip())[0]
+    primary = re.split(
+        r"[,\s/;-]+",
+        str(position)
+        .upper()
+        .strip(),
+    )[0]
 
-    if primary in {"GK", "G"}:
+    if primary in {
+        "GK",
+        "G",
+    }:
         return "GK"
 
-    if primary in {"DF", "DEF", "D", "FB", "CB", "LB", "RB"}:
+    if primary in {
+        "DF",
+        "DEF",
+        "D",
+        "FB",
+        "CB",
+        "LB",
+        "RB",
+    }:
         return "DF"
 
-    if primary in {"MF", "MID", "M", "DM", "CM", "AM", "LM", "RM", "WM"}:
+    if primary in {
+        "MF",
+        "MID",
+        "M",
+        "DM",
+        "CM",
+        "AM",
+        "LM",
+        "RM",
+        "WM",
+    }:
         return "MF"
 
-    if primary in {"FW", "FWD", "F", "ST", "LW", "RW"}:
+    if primary in {
+        "FW",
+        "FWD",
+        "F",
+        "ST",
+        "LW",
+        "RW",
+    }:
         return "FW"
 
     return None
 
 
-def require_columns(df: pd.DataFrame):
+# =============================================================================
+# Input validation
+# =============================================================================
+
+
+def require_columns(df):
+
     required = {
         "player",
         "team",
         MINUTES_COLUMN,
         POSITION_COLUMN,
         AGE_COLUMN,
-        *FBREF_COUNT_FEATURES.values(),
-        *BUNDESLIGA_TOTAL_FEATURES.values(),
-        *BUNDESLIGA_MAX_FEATURES.values(),
+        *SHOOTING_COLUMNS.values(),
+        *TEAM_SUCCESS_COLUMNS.values(),
+        *MISC_COLUMNS.values(),
     }
 
-    missing = sorted(required - set(df.columns))
+    missing = sorted(
+        required
+        - set(df.columns)
+    )
 
     if missing:
+
         raise ValueError(
-            "Input CSV is missing required columns:\n" +
-            "\n".join(f"  - {column}" for column in missing)
+            "Input CSV is missing required columns:\n"
+            + "\n".join(
+                f"  - {column}"
+                for column in missing
+            )
         )
 
 
-def combine_player_rows(df: pd.DataFrame) -> pd.DataFrame:
+# =============================================================================
+# Player aggregation
+# =============================================================================
+
+
+def combine_player_rows(df):
+
     players = []
 
-    for player_name, group in df.groupby("player", sort=False):
+    for player_name, group in df.groupby(
+        "player",
+        sort=False,
+    ):
+
         group = group.copy()
-        group["_minutes"] = numeric(group[MINUTES_COLUMN]).fillna(0)
 
-        total_minutes = float(group["_minutes"].sum())
+        group["_minutes"] = (
+            numeric(
+                group[MINUTES_COLUMN]
+            )
+            .fillna(0)
+        )
 
-        # Strictly > 400 minutes by default.
+        total_minutes = float(
+            group["_minutes"].sum()
+        )
+
         if total_minutes <= MIN_MINUTES:
             continue
 
-        # Use the row with the most minutes to define primary team-row metadata
-        # such as position and age.
-        primary_row = group.loc[group["_minutes"].idxmax()]
+        primary = group.loc[
+            group["_minutes"].idxmax()
+        ]
+
+        raw_position = primary.get(
+            POSITION_COLUMN
+        )
 
         teams = " / ".join(
             dict.fromkeys(
@@ -200,280 +478,1010 @@ def combine_player_rows(df: pd.DataFrame) -> pd.DataFrame:
                 .dropna()
                 .astype(str)
                 .str.strip()
-                .loc[lambda s: s.ne("")]
+                .loc[
+                    lambda x:
+                        x.ne("")
+                ]
             )
         )
-
-        raw_position = primary_row.get(POSITION_COLUMN)
 
         row = {
-            "player": str(player_name).strip(),
-            "team": teams,
-            "position": "" if pd.isna(raw_position) else str(raw_position).strip(),
-            "position_group": classify_position(raw_position),
-            "age": pd.to_numeric(primary_row.get(AGE_COLUMN), errors="coerce"),
-            "minutes": total_minutes,
+            "player":
+                str(player_name).strip(),
+
+            "team":
+                teams,
+
+            "position":
+                ""
+                if pd.isna(raw_position)
+                else str(raw_position).strip(),
+
+            "position_group":
+                classify_position(
+                    raw_position
+                ),
+
+            "age":
+                pd.to_numeric(
+                    primary.get(
+                        AGE_COLUMN
+                    ),
+                    errors="coerce",
+                ),
+
+            "minutes":
+                total_minutes,
         }
 
-        # FBref counts -> sum across player/team rows -> per 90.
-        for output_name, source_column in FBREF_COUNT_FEATURES.items():
-            values = numeric(group[source_column])
-            total = values.sum(min_count=1)
+        # ---------------------------------------------------------------------
+        # PCA1 — Shooting
+        # ---------------------------------------------------------------------
 
-            row[output_name] = (
-                float(total) * 90.0 / total_minutes
-                if pd.notna(total)
-                else np.nan
-            )
-
-        # Bundesliga player totals -> first available -> per 90.
-        for output_name, source_column in BUNDESLIGA_TOTAL_FEATURES.items():
-            value = first_numeric_value(group[source_column])
-
-            row[output_name] = (
-                float(value) * 90.0 / total_minutes
-                if pd.notna(value)
-                else np.nan
-            )
-
-        # Rate/maximum features are not normalized to 90.
-        for output_name, source_column in BUNDESLIGA_MAX_FEATURES.items():
-            row[output_name] = max_numeric_value(group[source_column])
-
-        # Intensity relative to total distance.
-        distance_total = first_numeric_value(group["bundesliga_distance_km"])
-        sprints_total = first_numeric_value(group["bundesliga_sprints"])
-        intensive_total = first_numeric_value(group["bundesliga_intensive_runs"])
-
-        row["sprints_per_km"] = (
-            float(sprints_total) / float(distance_total)
-            if pd.notna(sprints_total)
-            and pd.notna(distance_total)
-            and float(distance_total) > 0
-            else np.nan
+        goals = numeric(
+            group[
+                SHOOTING_COLUMNS["goals"]
+            ]
+        ).sum(
+            min_count=1
         )
 
-        row["intensive_runs_per_km"] = (
-            float(intensive_total) / float(distance_total)
-            if pd.notna(intensive_total)
-            and pd.notna(distance_total)
-            and float(distance_total) > 0
-            else np.nan
+        shots = numeric(
+            group[
+                SHOOTING_COLUMNS["shots"]
+            ]
+        ).sum(
+            min_count=1
         )
+
+        sot = numeric(
+            group[
+                SHOOTING_COLUMNS["shots_on_target"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        penalties = numeric(
+            group[
+                SHOOTING_COLUMNS["penalties_scored"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        penalty_attempts = numeric(
+            group[
+                SHOOTING_COLUMNS["penalty_attempts"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        row["shooting_goals_per90"] = safe_per90(
+            goals,
+            total_minutes,
+        )
+
+        row["shots_per90"] = safe_per90(
+            shots,
+            total_minutes,
+        )
+
+        row["shots_on_target_per90"] = safe_per90(
+            sot,
+            total_minutes,
+        )
+
+        row["shots_on_target_pct"] = safe_percentage(
+            sot,
+            shots,
+        )
+
+        row["goals_per_shot"] = safe_ratio(
+            goals,
+            shots,
+        )
+
+        row["goals_per_shot_on_target"] = safe_ratio(
+            goals,
+            sot,
+        )
+
+        row["penalties_scored_per90"] = safe_per90(
+            penalties,
+            total_minutes,
+        )
+
+        row["penalty_attempts_per90"] = safe_per90(
+            penalty_attempts,
+            total_minutes,
+        )
+
+        # ---------------------------------------------------------------------
+        # PCA2 — Team Success
+        # ---------------------------------------------------------------------
+
+        goals_for = numeric(
+            group[
+                TEAM_SUCCESS_COLUMNS["goals_for"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        goals_against = numeric(
+            group[
+                TEAM_SUCCESS_COLUMNS["goals_against"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        plus_minus = numeric(
+            group[
+                TEAM_SUCCESS_COLUMNS["plus_minus"]
+            ]
+        ).sum(
+            min_count=1
+        )
+
+        row["points_per_match"] = weighted_average(
+            group[
+                TEAM_SUCCESS_COLUMNS["points_per_match"]
+            ],
+            group["_minutes"],
+        )
+
+        row["team_goals_for_per90"] = safe_per90(
+            goals_for,
+            total_minutes,
+        )
+
+        row["team_goals_against_per90"] = safe_per90(
+            goals_against,
+            total_minutes,
+        )
+
+        row["plus_minus_per90"] = safe_per90(
+            plus_minus,
+            total_minutes,
+        )
+
+        row["on_off_per90"] = weighted_average(
+            group[
+                TEAM_SUCCESS_COLUMNS["on_off"]
+            ],
+            group["_minutes"],
+        )
+
+        # ---------------------------------------------------------------------
+        # PCA3 — Misc
+        # ---------------------------------------------------------------------
+
+        misc_map = {
+            "yellow_cards_per90":
+                "yellow_cards",
+
+            "red_cards_per90":
+                "red_cards",
+
+            "second_yellow_cards_per90":
+                "second_yellow_cards",
+
+            "fouls_committed_per90":
+                "fouls_committed",
+
+            "fouls_drawn_per90":
+                "fouls_drawn",
+
+            "offsides_per90":
+                "offsides",
+
+            "crosses_per90":
+                "crosses",
+
+            "interceptions_per90":
+                "interceptions",
+
+            "tackles_won_per90":
+                "tackles_won",
+
+            "own_goals_per90":
+                "own_goals",
+        }
+
+        for output, source in misc_map.items():
+
+            value = numeric(
+                group[
+                    MISC_COLUMNS[source]
+                ]
+            ).sum(
+                min_count=1
+            )
+
+            row[output] = safe_per90(
+                value,
+                total_minutes,
+            )
 
         players.append(row)
 
-    return pd.DataFrame(players)
+    return pd.DataFrame(
+        players
+    )
+
+
+# =============================================================================
+# PCA
+# =============================================================================
 
 
 def fit_one_component(
-    players: pd.DataFrame,
-    feature_names: list[str],
-    group_name: str,
+    players,
+    features,
+    group_name,
+    orientation_feature=None,
 ):
-    """
-    Fit one PCA component for one semantic feature group.
 
-    Missing values are median-imputed. Every feature is z-standardized before
-    PCA. The component sign is then oriented so that larger scores correspond,
-    on average, to larger values across the group's standardized metrics.
+    X = players[
+        features
+    ].copy()
 
-    Finally the component score itself is standardized to mean 0 / SD 1. This
-    makes the three visual axes easier to compare.
-    """
+    observed = X.notna().sum(
+        axis=1
+    )
 
-    X = players[feature_names].copy()
+    imputed = (
+        len(features)
+        - observed
+    )
 
-    # Keep visibility of missing-data quality in the exported CSV.
-    observed_count = X.notna().sum(axis=1)
-    imputed_count = len(feature_names) - observed_count
-
-    # Guard against accidental entirely-empty features.
-    entirely_missing = [
-        feature for feature in feature_names
-        if X[feature].notna().sum() == 0
+    # Drop features with no data at all.
+    usable = [
+        feature
+        for feature in features
+        if X[feature].notna().any()
     ]
 
-    if entirely_missing:
-        raise ValueError(
-            f"{group_name}: these selected PCA features contain no data at all: "
-            + ", ".join(entirely_missing)
+    dropped_empty = [
+        feature
+        for feature in features
+        if feature not in usable
+    ]
+
+    if dropped_empty:
+
+        print(
+            f"{group_name}: dropping empty features:"
         )
 
-    imputer = SimpleImputer(strategy="median")
-    X_imputed = imputer.fit_transform(X)
+        for feature in dropped_empty:
+            print(
+                f"  - {feature}"
+            )
+
+    if not usable:
+        raise ValueError(
+            f"{group_name}: no usable features."
+        )
+
+    X_usable = X[
+        usable
+    ]
+
+    imputer = SimpleImputer(
+        strategy="median"
+    )
+
+    X_imputed = imputer.fit_transform(
+        X_usable
+    )
+
+    variances = np.var(
+        X_imputed,
+        axis=0,
+    )
+
+    keep_mask = variances > 0
+
+    used_features = [
+        feature
+        for feature, keep
+        in zip(
+            usable,
+            keep_mask,
+        )
+        if keep
+    ]
+
+    if not used_features:
+        raise ValueError(
+            f"{group_name}: all features have zero variance."
+        )
+
+    X_used = X_imputed[
+        :,
+        keep_mask
+    ]
 
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_imputed)
 
-    pca = PCA(n_components=1)
-    raw_scores = pca.fit_transform(X_scaled)[:, 0]
+    X_scaled = scaler.fit_transform(
+        X_used
+    )
+
+    pca = PCA(
+        n_components=1
+    )
+
+    raw_scores = pca.fit_transform(
+        X_scaled
+    )[:, 0]
+
     loadings = pca.components_[0].copy()
 
-    # PCA signs are arbitrary. Orient the component so positive means "more"
-    # of the overall group profile rather than the inverse.
-    mean_feature_activity = X_scaled.mean(axis=1)
-    correlation = np.corrcoef(raw_scores, mean_feature_activity)[0, 1]
+    if (
+        orientation_feature
+        and orientation_feature in used_features
+    ):
 
-    if np.isfinite(correlation) and correlation < 0:
+        index = used_features.index(
+            orientation_feature
+        )
+
+        orientation = X_scaled[
+            :,
+            index
+        ]
+
+    else:
+
+        orientation = X_scaled.mean(
+            axis=1
+        )
+
+    correlation = np.corrcoef(
+        raw_scores,
+        orientation,
+    )[0, 1]
+
+    if (
+        np.isfinite(correlation)
+        and correlation < 0
+    ):
+
         raw_scores *= -1
         loadings *= -1
 
-    # Standardize the final component score so 0 is league-average and +/-1
-    # is approximately one standard deviation along this grouped PCA axis.
-    score_std = raw_scores.std(ddof=0)
+    std = raw_scores.std(
+        ddof=0
+    )
 
-    if score_std == 0:
-        scores = np.zeros_like(raw_scores)
-    else:
-        scores = (raw_scores - raw_scores.mean()) / score_std
+    scores = (
+        np.zeros_like(raw_scores)
+        if std == 0
+        else (
+            raw_scores
+            - raw_scores.mean()
+        ) / std
+    )
 
-    loading_table = pd.DataFrame({
-        "group": group_name,
-        "feature": feature_names,
-        "loading": loadings,
-        "observed_pct": [players[f].notna().mean() * 100 for f in feature_names],
-        "imputation_median": imputer.statistics_,
-    })
+    loading_map = dict(
+        zip(
+            used_features,
+            loadings,
+        )
+    )
 
-    explained_variance_pct = float(pca.explained_variance_ratio_[0] * 100)
-    loading_table["explained_variance_pct"] = explained_variance_pct
+    rows = []
+
+    for feature in features:
+
+        rows.append({
+            "group":
+                group_name,
+
+            "feature":
+                feature,
+
+            "loading":
+                float(
+                    loading_map.get(
+                        feature,
+                        0.0,
+                    )
+                ),
+
+            "used_in_pca":
+                feature in used_features,
+
+            "observed_pct":
+                float(
+                    players[feature]
+                    .notna()
+                    .mean()
+                    * 100
+                ),
+        })
+
+    explained = float(
+        pca.explained_variance_ratio_[0]
+        * 100
+    )
+
+    loading_table = pd.DataFrame(
+        rows
+    )
+
+    loading_table[
+        "explained_variance_pct"
+    ] = explained
 
     return {
-        "scores": scores,
-        "observed_count": observed_count,
-        "imputed_count": imputed_count,
-        "loadings": loading_table,
-        "explained_variance_pct": explained_variance_pct,
+        "scores":
+            scores,
+
+        "observed":
+            observed,
+
+        "imputed":
+            imputed,
+
+        "loadings":
+            loading_table,
+
+        "used_features":
+            used_features,
+
+        "explained":
+            explained,
     }
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Manifest builder
+# =============================================================================
+
+
+def read_source_metadata(
+    pca_file: Path,
+):
+
+    # First try metadata stored directly in the prepared CSV.
+    try:
+
+        head = pd.read_csv(
+            pca_file,
+            nrows=1,
+        )
+
+        if (
+            not head.empty
+            and "league" in head.columns
+            and "season" in head.columns
+        ):
+
+            return (
+                str(
+                    head.iloc[0]["league"]
+                ).strip(),
+                str(
+                    head.iloc[0]["season"]
+                ).strip(),
+            )
+
+    except Exception:
+        pass
+
+    # Legacy prepared files may not contain league/season.
+    # Try the corresponding raw source file in the same folder.
+    raw_files = sorted(
+        pca_file.parent.glob(
+            "data_*_all_players.csv"
+        )
+    )
+
+    if len(raw_files) == 1:
+
+        try:
+
+            raw = pd.read_csv(
+                raw_files[0],
+                sep=";",
+                decimal=",",
+                nrows=1,
+            )
+
+            if (
+                not raw.empty
+                and "league" in raw.columns
+                and "season" in raw.columns
+            ):
+
+                return (
+                    str(
+                        raw.iloc[0]["league"]
+                    ).strip(),
+                    str(
+                        raw.iloc[0]["season"]
+                    ).strip(),
+                )
+
+        except Exception:
+            pass
+
+    return None
+
+
+def build_visualization_manifest():
+
+    VIZ_DIRECTORY.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # Includes:
+    #
+    # player_pca_fbref.csv
+    # player_pca_fbref_2025_26.csv
+    # player_pca_fbref_2024_25.csv
+    files = sorted(
+        DATA_DIRECTORY.rglob(
+            "player_pca_fbref*.csv"
+        )
+    )
+
+    sources_by_key = {}
+
+    for pca_file in files:
+
+        metadata = read_source_metadata(
+            pca_file
+        )
+
+        if metadata is None:
+
+            print(
+                "Manifest warning: "
+                f"cannot determine league/season for {pca_file}"
+            )
+
+            continue
+
+        league, season = metadata
+
+        league_name = league_display_name(
+            league
+        )
+
+        season_label = season_display_name(
+            season
+        )
+
+        relative_path = os.path.relpath(
+            pca_file,
+            VIZ_DIRECTORY,
+        ).replace(
+            os.sep,
+            "/",
+        )
+
+        key = (
+            league,
+            season,
+        )
+
+        source = {
+            "id":
+                (
+                    f"{league_directory_name(league)}-"
+                    f"{season_filename_token(season)}"
+                ),
+
+            "league":
+                league,
+
+            "league_name":
+                league_name,
+
+            "season":
+                season,
+
+            "season_label":
+                season_label,
+
+            "path":
+                relative_path,
+
+            "modified":
+                datetime.fromtimestamp(
+                    pca_file.stat().st_mtime,
+                    timezone.utc,
+                ).isoformat(),
+
+            # Prefer season-specific files over legacy file.
+            "_priority":
+                1
+                if re.search(
+                    r"_\d{4}_\d{2}\.csv$",
+                    pca_file.name,
+                )
+                else 0,
+        }
+
+        existing = sources_by_key.get(
+            key
+        )
+
+        if (
+            existing is None
+            or source["_priority"]
+            > existing["_priority"]
+        ):
+            sources_by_key[
+                key
+            ] = source
+
+    sources = list(
+        sources_by_key.values()
+    )
+
+    for source in sources:
+        source.pop(
+            "_priority",
+            None,
+        )
+
+    sources.sort(
+        key=lambda item: (
+            item["league_name"].lower(),
+            item["season"],
+        )
+    )
+
+    manifest = {
+        "generated_at":
+            datetime.now(
+                timezone.utc
+            ).isoformat(),
+
+        "sources":
+            sources,
+    }
+
+    MANIFEST_FILE.write_text(
+        json.dumps(
+            manifest,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    print(
+        f"Manifest: {MANIFEST_FILE}"
+    )
+
+    print(
+        f"Found {len(sources)} PCA datasets"
+    )
+
+    for source in sources:
+
+        print(
+            "  - "
+            f"{source['league_name']} "
+            f"{source['season_label']}"
+        )
+
+
+# =============================================================================
 # Main
-# -----------------------------------------------------------------------------
+# =============================================================================
 
 
 def main():
-    if not INPUT_FILE.exists():
+
+    args = parse_arguments()
+
+    league = args.league.strip()
+    season = args.season.strip()
+
+    league_directory = (
+        DATA_DIRECTORY
+        / league_directory_name(
+            league
+        )
+    )
+
+    season_token = season_filename_token(
+        season
+    )
+
+    input_file = (
+        league_directory
+        / f"data_{season_token}_all_players.csv"
+    )
+
+    output_file = (
+        league_directory
+        / f"player_pca_fbref_{season_token}.csv"
+    )
+
+    loadings_file = (
+        league_directory
+        / f"pca_loadings_fbref_{season_token}.csv"
+    )
+
+    summary_file = (
+        league_directory
+        / f"pca_summary_fbref_{season_token}.csv"
+    )
+
+    if not input_file.exists():
+
         raise FileNotFoundError(
-            f"Could not find {INPUT_FILE}. Put it in the same folder as this script."
+            f"Could not find {input_file}"
         )
 
-    # Current project CSV format: semicolon delimiter and decimal comma.
-    df = pd.read_csv(INPUT_FILE, sep=";", decimal=",")
-    require_columns(df)
+    print()
 
-    players = combine_player_rows(df)
+    print(
+        "Preparing FBref PCA"
+    )
+
+    print(
+        "==================="
+    )
+
+    print(
+        f"League: {league}"
+    )
+
+    print(
+        f"Season: {season}"
+    )
+
+    print(
+        f"Input:  {input_file}"
+    )
+
+    df = pd.read_csv(
+        input_file,
+        sep=";",
+        decimal=",",
+    )
+
+    require_columns(
+        df
+    )
+
+    players = combine_player_rows(
+        df
+    )
 
     if players.empty:
+
         raise ValueError(
-            f"No players have more than {MIN_MINUTES} total minutes."
+            f"No players have more than "
+            f"{MIN_MINUTES} minutes."
         )
 
-    if players["position_group"].isna().any():
-        unknown = players.loc[
-            players["position_group"].isna(),
-            ["player", "position"]
+    # Source metadata
+    players.insert(
+        0,
+        "season",
+        season,
+    )
+
+    players.insert(
+        0,
+        "league",
+        league,
+    )
+
+    # -------------------------------------------------------------------------
+    # PCA
+    # -------------------------------------------------------------------------
+
+    pca1 = fit_one_component(
+        players,
+        PCA1_FEATURES,
+        "PCA1_shooting_standard",
+        "shots_per90",
+    )
+
+    pca2 = fit_one_component(
+        players,
+        PCA2_FEATURES,
+        "PCA2_team_success",
+        "plus_minus_per90",
+    )
+
+    pca3 = fit_one_component(
+        players,
+        PCA3_FEATURES,
+        "PCA3_misc_performance",
+    )
+
+    players[
+        "pca1_shooting_score"
+    ] = pca1["scores"]
+
+    players[
+        "pca2_team_success_score"
+    ] = pca2["scores"]
+
+    players[
+        "pca3_misc_performance_score"
+    ] = pca3["scores"]
+
+    players["PC1"] = pca1["scores"]
+    players["PC2"] = pca2["scores"]
+    players["PC3"] = pca3["scores"]
+
+    players[
+        "pca1_observed_features"
+    ] = pca1["observed"]
+
+    players[
+        "pca1_imputed_features"
+    ] = pca1["imputed"]
+
+    players[
+        "pca2_observed_features"
+    ] = pca2["observed"]
+
+    players[
+        "pca2_imputed_features"
+    ] = pca2["imputed"]
+
+    players[
+        "pca3_observed_features"
+    ] = pca3["observed"]
+
+    players[
+        "pca3_imputed_features"
+    ] = pca3["imputed"]
+
+    all_features = list(
+        dict.fromkeys(
+            PCA1_FEATURES
+            + PCA2_FEATURES
+            + PCA3_FEATURES
+        )
+    )
+
+    players[
+        "observed_features"
+    ] = (
+        players[
+            all_features
         ]
-        print("Warning: unclassified positions found:")
-        print(unknown.to_string(index=False))
+        .notna()
+        .sum(axis=1)
+    )
 
-    physical = fit_one_component(players, PHYSICAL_FEATURES, "physical")
-    offensive = fit_one_component(players, OFFENSIVE_FEATURES, "offensive")
-    defensive = fit_one_component(players, DEFENSIVE_FEATURES, "defensive")
-
-    players["physical_score"] = physical["scores"]
-    players["offensive_score"] = offensive["scores"]
-    players["defensive_score"] = defensive["scores"]
-
-    players["physical_observed_features"] = physical["observed_count"]
-    players["physical_imputed_features"] = physical["imputed_count"]
-
-    players["offensive_observed_features"] = offensive["observed_count"]
-    players["offensive_imputed_features"] = offensive["imputed_count"]
-
-    players["defensive_observed_features"] = defensive["observed_count"]
-    players["defensive_imputed_features"] = defensive["imputed_count"]
-
-    # Keep a backwards-friendly total quality count too.
-    all_pca_features = list(dict.fromkeys(
-        PHYSICAL_FEATURES + OFFENSIVE_FEATURES + DEFENSIVE_FEATURES
-    ))
-    players["observed_features"] = players[all_pca_features].notna().sum(axis=1)
-    players["imputed_features"] = len(all_pca_features) - players["observed_features"]
+    players[
+        "imputed_features"
+    ] = (
+        len(all_features)
+        - players[
+            "observed_features"
+        ]
+    )
 
     output_columns = [
+        "league",
+        "season",
         "player",
         "team",
         "position",
         "position_group",
         "age",
         "minutes",
-        "physical_score",
-        "offensive_score",
-        "defensive_score",
+
+        "PC1",
+        "PC2",
+        "PC3",
+
+        "pca1_shooting_score",
+        "pca2_team_success_score",
+        "pca3_misc_performance_score",
+
         "observed_features",
         "imputed_features",
-        "physical_observed_features",
-        "physical_imputed_features",
-        "offensive_observed_features",
-        "offensive_imputed_features",
-        "defensive_observed_features",
-        "defensive_imputed_features",
-        *all_pca_features,
+
+        "pca1_observed_features",
+        "pca1_imputed_features",
+
+        "pca2_observed_features",
+        "pca2_imputed_features",
+
+        "pca3_observed_features",
+        "pca3_imputed_features",
+
+        *all_features,
     ]
 
-    players[output_columns].to_csv(OUTPUT_FILE, index=False)
+    players[
+        output_columns
+    ].to_csv(
+        output_file,
+        index=False,
+    )
 
     loadings = pd.concat(
         [
-            physical["loadings"],
-            offensive["loadings"],
-            defensive["loadings"],
+            pca1["loadings"],
+            pca2["loadings"],
+            pca3["loadings"],
         ],
         ignore_index=True,
     )
-    loadings.to_csv(LOADINGS_FILE, index=False)
+
+    loadings.to_csv(
+        loadings_file,
+        index=False,
+    )
 
     summary = pd.DataFrame([
         {
-            "axis": "Physical intensity",
-            "score_column": "physical_score",
-            "feature_count": len(PHYSICAL_FEATURES),
-            "explained_variance_pct": physical["explained_variance_pct"],
+            "axis":
+                "PCA1",
+
+            "group":
+                "FBref Shooting Standard",
+
+            "explained_variance_pct":
+                pca1["explained"],
         },
         {
-            "axis": "Offensive activity",
-            "score_column": "offensive_score",
-            "feature_count": len(OFFENSIVE_FEATURES),
-            "explained_variance_pct": offensive["explained_variance_pct"],
+            "axis":
+                "PCA2",
+
+            "group":
+                "FBref Playing Time Team Success",
+
+            "explained_variance_pct":
+                pca2["explained"],
         },
         {
-            "axis": "Defensive activity",
-            "score_column": "defensive_score",
-            "feature_count": len(DEFENSIVE_FEATURES),
-            "explained_variance_pct": defensive["explained_variance_pct"],
+            "axis":
+                "PCA3",
+
+            "group":
+                "FBref Misc Performance",
+
+            "explained_variance_pct":
+                pca3["explained"],
         },
     ])
-    summary.to_csv(SUMMARY_FILE, index=False)
+
+    summary.to_csv(
+        summary_file,
+        index=False,
+    )
 
     print()
-    print("Grouped PCA complete")
-    print("====================")
-    print(f"Input rows:              {len(df)}")
-    print(f"Players > {MIN_MINUTES} min:      {len(players)}")
+
+    print(
+        f"Saved: {output_file}"
+    )
+
+    print(
+        f"Saved: {loadings_file}"
+    )
+
+    print(
+        f"Saved: {summary_file}"
+    )
+
     print()
-    print("Axis variance captured inside each feature group:")
-    print(f"  Physical intensity: {physical['explained_variance_pct']:.1f}%")
-    print(f"  Offensive activity: {offensive['explained_variance_pct']:.1f}%")
-    print(f"  Defensive activity: {defensive['explained_variance_pct']:.1f}%")
-    print()
-    print("Position counts:")
-    print(players["position_group"].value_counts(dropna=False).to_string())
-    print()
-    print(f"Saved: {OUTPUT_FILE}")
-    print(f"Saved: {LOADINGS_FILE}")
-    print(f"Saved: {SUMMARY_FILE}")
+
+    build_visualization_manifest()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4 @@
+axis,group,explained_variance_pct
+PCA1,FBref Shooting Standard,50.365586161603424
+PCA2,FBref Playing Time Team Success,68.6044736805789
+PCA3,FBref Misc Performance,23.566090592130625

@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-09-07T11:44:26.160247+00:00",
+  "sources": [
+    {
+      "id": "bundesliga-2025_26",
+      "league": "GER-Bundesliga",
+      "league_name": "Bundesliga",
+      "season": "2025-2026",
+      "season_label": "2025/26",
+      "path": "../data/bundesliga/player_pca_fbref_2025_26.csv",
+      "modified": "2026-09-07T11:43:25.851413+00:00"
+    },
+    {
+      "id": "premier_league-2025_26",
+      "league": "ENG-Premier League",
+      "league_name": "Premier League",
+      "season": "2025-2026",
+      "season_label": "2025/26",
+      "path": "../data/premier_league/player_pca_fbref_2025_26.csv",
+      "modified": "2026-09-07T11:44:26.134556+00:00"
+    }
+  ]
+}

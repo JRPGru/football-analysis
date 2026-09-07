@@ -65,9 +65,19 @@ body {
   align-items: flex-end;
   justify-content: space-between;
 
-  gap: 24px;
+  gap: 32px;
 
   padding: 8px 4px 20px;
+}
+
+
+.hero-side {
+  display: flex;
+
+  flex-direction: column;
+  align-items: flex-end;
+
+  gap: 16px;
 }
 
 
@@ -110,7 +120,127 @@ h1 {
 
 
 /* -------------------------------------------------------------------------- */
-/* Position legend                                                            */
+/* Dataset selectors                                                          */
+/* -------------------------------------------------------------------------- */
+
+.dataset-controls {
+  display: flex;
+
+  align-items: flex-end;
+
+  gap: 12px;
+}
+
+
+.dataset-control {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.dataset-control label {
+  color: #8f9baa;
+
+  font-size: 0.7rem;
+  font-weight: 700;
+
+  letter-spacing: 0.09em;
+
+  text-transform: uppercase;
+}
+
+
+.select-wrap {
+  position: relative;
+}
+
+
+.select-wrap::after {
+  content: "";
+
+  position: absolute;
+
+  top: 50%;
+  right: 14px;
+
+  width: 7px;
+  height: 7px;
+
+  border-right: 2px solid #8f9baa;
+  border-bottom: 2px solid #8f9baa;
+
+  transform:
+    translateY(-70%)
+    rotate(45deg);
+
+  pointer-events: none;
+}
+
+
+.dataset-control select {
+  appearance: none;
+
+  min-width: 180px;
+
+  padding: 10px 38px 10px 14px;
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.10);
+
+  border-radius: 12px;
+
+  background:
+    rgba(255, 255, 255, 0.045);
+
+  color: #f5f7fa;
+
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 550;
+
+  outline: none;
+
+  cursor: pointer;
+}
+
+
+.dataset-control select:hover:not(:disabled) {
+  background:
+    rgba(255, 255, 255, 0.075);
+
+  border-color:
+    rgba(255, 255, 255, 0.18);
+}
+
+
+.dataset-control select:focus-visible {
+  outline:
+    2px solid #7dafff;
+
+  outline-offset: 2px;
+}
+
+
+.dataset-control select:disabled {
+  opacity: 0.5;
+
+  cursor: wait;
+}
+
+
+.dataset-control option {
+  background: #151a20;
+
+  color: #f5f7fa;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Legend                                                                     */
 /* -------------------------------------------------------------------------- */
 
 .legend {
@@ -167,7 +297,7 @@ h1 {
 
 
 /* -------------------------------------------------------------------------- */
-/* Status bar                                                                 */
+/* Status                                                                     */
 /* -------------------------------------------------------------------------- */
 
 .info-bar {
@@ -213,20 +343,17 @@ h1 {
       rgba(15, 19, 24, 0.96)
     );
 
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.08);
 
   border-radius: 18px;
 
   box-shadow:
-    0 8px 30px rgba(0, 0, 0, 0.18);
-
-  backdrop-filter: blur(14px);
+    0 8px 30px
+    rgba(0, 0, 0, 0.18);
 }
 
-
-/* -------------------------------------------------------------------------- */
-/* Filter layout                                                              */
-/* -------------------------------------------------------------------------- */
 
 .filter-grid {
   display: grid;
@@ -259,13 +386,10 @@ h1 {
 }
 
 
-/* -------------------------------------------------------------------------- */
-/* Filter pills                                                               */
-/* -------------------------------------------------------------------------- */
-
 .filter-chip-list,
 .club-filter-list {
   display: flex;
+
   flex-wrap: wrap;
 
   gap: 8px;
@@ -278,32 +402,8 @@ h1 {
   overflow-y: auto;
 
   padding-right: 6px;
-
-  scrollbar-width: thin;
-  scrollbar-color: #3d4854 transparent;
 }
 
-
-.club-filter-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-
-.club-filter-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-
-.club-filter-list::-webkit-scrollbar-thumb {
-  background: #3d4854;
-
-  border-radius: 20px;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Filter chips                                                               */
-/* -------------------------------------------------------------------------- */
 
 .filter-chip {
   position: relative;
@@ -349,19 +449,13 @@ h1 {
   font-weight: 500;
 
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    160ms ease;
 }
 
 
 .filter-chip:hover span {
   background:
     rgba(255, 255, 255, 0.075);
-
-  border-color:
-    rgba(255, 255, 255, 0.16);
 
   color: #f4f7fa;
 
@@ -381,17 +475,8 @@ h1 {
 }
 
 
-.filter-chip input:focus-visible + span {
-  outline:
-    2px solid
-    #7dafff;
-
-  outline-offset: 2px;
-}
-
-
 /* -------------------------------------------------------------------------- */
-/* Age filter                                                                 */
+/* Age                                                                        */
 /* -------------------------------------------------------------------------- */
 
 .age-filter {
@@ -415,8 +500,6 @@ h1 {
   font-size: 0.7rem;
   font-weight: 600;
 
-  letter-spacing: 0.05em;
-
   text-transform: uppercase;
 }
 
@@ -428,42 +511,16 @@ h1 {
 
   border:
     1px solid
-    rgba(255, 255, 255, 0.10);
+    rgba(255,255,255,.1);
 
   border-radius: 10px;
 
   background:
-    rgba(255, 255, 255, 0.045);
+    rgba(255,255,255,.045);
 
-  color: #ffffff;
+  color: white;
 
   font: inherit;
-  font-size: 0.9rem;
-
-  outline: none;
-
-  transition:
-    border-color 160ms ease,
-    background 160ms ease;
-}
-
-
-.age-filter input:hover {
-  background:
-    rgba(255, 255, 255, 0.065);
-}
-
-
-.age-filter input:focus {
-  border-color: #73879a;
-
-  background:
-    rgba(255, 255, 255, 0.07);
-}
-
-
-.age-filter input::placeholder {
-  color: #596572;
 }
 
 
@@ -471,26 +528,6 @@ h1 {
   padding-bottom: 10px;
 
   color: #596572;
-
-  font-size: 0.78rem;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Remove ugly number spinner styling where possible                          */
-/* -------------------------------------------------------------------------- */
-
-.age-filter input[type="number"] {
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-
-
-.age-filter input[type="number"]::-webkit-inner-spin-button,
-.age-filter input[type="number"]::-webkit-outer-spin-button {
-  margin: 0;
-
-  -webkit-appearance: none;
 }
 
 
@@ -512,7 +549,7 @@ h1 {
 
   border-top:
     1px solid
-    rgba(255, 255, 255, 0.07);
+    rgba(255,255,255,.07);
 }
 
 
@@ -523,66 +560,23 @@ h1 {
 }
 
 
-/* -------------------------------------------------------------------------- */
-/* Clear filters button                                                       */
-/* -------------------------------------------------------------------------- */
-
 #clear-filters {
-  appearance: none;
-
   padding: 8px 13px;
 
   border:
     1px solid
-    rgba(255, 255, 255, 0.09);
+    rgba(255,255,255,.09);
 
   border-radius: 999px;
 
   background:
-    rgba(255, 255, 255, 0.04);
+    rgba(255,255,255,.04);
 
   color: #aeb8c2;
 
   font: inherit;
-  font-size: 0.78rem;
-  font-weight: 550;
 
   cursor: pointer;
-
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
-}
-
-
-#clear-filters:hover {
-  background:
-    rgba(255, 255, 255, 0.08);
-
-  border-color:
-    rgba(255, 255, 255, 0.16);
-
-  color: #ffffff;
-
-  transform:
-    translateY(-1px);
-}
-
-
-#clear-filters:active {
-  transform:
-    translateY(0);
-}
-
-
-#clear-filters:focus-visible {
-  outline:
-    2px solid
-    #7dafff;
-
-  outline-offset: 2px;
 }
 
 
@@ -618,48 +612,18 @@ h1 {
 
 
 /* -------------------------------------------------------------------------- */
-/* Plotly cleanup                                                             */
-/* -------------------------------------------------------------------------- */
-
-.modebar {
-  opacity: 0.55;
-
-  transition:
-    opacity 160ms ease;
-}
-
-
-.modebar:hover {
-  opacity: 1;
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* Error                                                                      */
-/* -------------------------------------------------------------------------- */
-
-.error {
-  display: grid;
-
-  place-items: center;
-
-  min-height: 420px;
-
-  padding: 32px;
-
-  color: #ff9d9d;
-
-  text-align: center;
-
-  white-space: pre-wrap;
-}
-
-
-/* -------------------------------------------------------------------------- */
 /* Footer                                                                     */
 /* -------------------------------------------------------------------------- */
 
 footer {
+  display: flex;
+
+  justify-content: space-between;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
   padding: 14px 4px 0;
 
   color: var(--muted);
@@ -669,28 +633,11 @@ footer {
 
 
 /* -------------------------------------------------------------------------- */
-/* Tablet                                                                     */
-/* -------------------------------------------------------------------------- */
-
-@media (max-width: 1000px) {
-  .filter-grid {
-    grid-template-columns:
-      1fr
-      1fr;
-  }
-
-
-  .filter-section:nth-child(2) {
-    grid-column: span 2;
-  }
-}
-
-
-/* -------------------------------------------------------------------------- */
 /* Mobile                                                                     */
 /* -------------------------------------------------------------------------- */
 
 @media (max-width: 760px) {
+
   body {
     padding: 14px;
   }
@@ -703,6 +650,27 @@ footer {
   }
 
 
+  .hero-side {
+    width: 100%;
+
+    align-items: flex-start;
+  }
+
+
+  .dataset-controls {
+    width: 100%;
+
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+
+  .dataset-control select {
+    width: 100%;
+  }
+
+
   .legend {
     justify-content: flex-start;
   }
@@ -710,8 +678,6 @@ footer {
 
   .info-bar {
     flex-direction: column;
-
-    gap: 4px;
   }
 
 
@@ -720,32 +686,8 @@ footer {
   }
 
 
-  .filter-panel {
-    padding: 15px;
-  }
-
-
   .filter-grid {
     grid-template-columns: 1fr;
-
-    gap: 20px;
-  }
-
-
-  .filter-section:nth-child(2) {
-    grid-column: auto;
-  }
-
-
-  .club-filter-list {
-    max-height: 190px;
-  }
-
-
-  .filter-footer {
-    align-items: flex-start;
-
-    flex-direction: column;
   }
 
 
@@ -754,36 +696,5 @@ footer {
 
     height: 72vh;
   }
-}
 
-
-/* -------------------------------------------------------------------------- */
-/* Very small screens                                                         */
-/* -------------------------------------------------------------------------- */
-
-@media (max-width: 480px) {
-  .filter-chip span {
-    min-height: 34px;
-
-    padding: 7px 11px;
-
-    font-size: 0.78rem;
-  }
-
-
-  .age-filter {
-    align-items: flex-end;
-
-    flex-wrap: wrap;
-  }
-
-
-  .age-filter input {
-    width: 82px;
-  }
-
-
-  h1 {
-    font-size: 2.2rem;
-  }
 }
