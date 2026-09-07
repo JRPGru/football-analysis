@@ -66,22 +66,15 @@ PCA_GROUPS = [
     # =========================================================================
 
     {
-        "name": "Shooting",
+        "name": "Scoring and Shooting",
 
         "metrics": [
 
-            "fbref_standard_per_90_minutes_gls",
-
-            "fbref_shooting_standard_sh_per_90",
-
-            "fbref_shooting_standard_sot_per_90",
-
+            "fbref_standard_per_90_minutes_g_plus_a",
             "fbref_shooting_standard_sotpct",
-
             "fbref_shooting_standard_g_per_sh",
-
             "fbref_shooting_standard_g_per_sot",
-
+            "fbref_playing_time_team_success_ong",
         ],
     },
 
@@ -91,15 +84,12 @@ PCA_GROUPS = [
     # =========================================================================
 
     {
-        "name": "Team Success",
+        "name": "Relative Team Success",
 
         "metrics": [
-
             "fbref_playing_time_team_success_ppm",
-
-            "fbref_playing_time_team_success_plus_minus90",
-
-            "fbref_playing_time_team_success_on_off",
+            "fbref_playing_time_team_success_ong",
+            "fbref_playing_time_team_success_plus_minus",
 
         ],
     },
@@ -110,22 +100,15 @@ PCA_GROUPS = [
     # =========================================================================
 
     {
-        "name": "General Activity",
+        "name": "Pressing Quality",
 
         "metrics": [
-
+            "fbref_playing_time_starts_starts",
+            "fbref_standard_playing_time_min",
             "fbref_misc_performance_fls",
-
-            "fbref_misc_performance_fld",
-
-            "fbref_misc_performance_off",
-
             "fbref_misc_performance_crs",
-
             "fbref_misc_performance_int",
-
             "fbref_misc_performance_tklw",
-
         ],
     },
 

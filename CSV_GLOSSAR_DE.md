@@ -181,20 +181,6 @@ Beispiel: `fbref_standard_playing_time_min` bedeutet Quelle **FBref**, Tabelle *
 | `fbref_keeper_penalty_kicks_pkm` | PKm / Penalty Kicks Missed | Gegnerische Elfmeter, die das Tor verfehlen; Anzahl. Nicht als gehaltene Elfmeter zählen. |
 | `fbref_keeper_penalty_kicks_savepct` | Save% / Penalty Save Percentage | Elfmeter-Abwehrquote: 100 × PKsv / (PKatt − PKm); Prozent. Fehlschüsse werden aus dem Nenner ausgeschlossen. Siehe Quellenhinweis zum widersprüchlichen FBref-Tooltip. |
 
-## 7. Bundesliga.com – Ergänzende Statistiken
-
-| Exakte CSV-Spalte | Abkürzung / Englisch | Deutsche Erklärung und Einheit |
-| --- | --- | --- |
-| `bundesliga_aerial_duels_won` | Aerial Duels Won | Gewonnene Luft-/Kopfballduelle; Anzahl. |
-| `bundesliga_crosses_open_play` | Crosses from Open Play | Flanken aus dem offenen Spiel; Anzahl, ohne Standardsituationen. |
-| `bundesliga_distance_km` | Distance / Kilometres | Zurückgelegte Gesamtlaufstrecke; Kilometer. Kein Durchschnitt pro Spiel. |
-| `bundesliga_duels_won` | Duels Won | Gewonnene Zweikämpfe gemäß Bundesliga.com; Anzahl. Breiter als FBref-TklW; Luftduelle nicht ungeprüft hinzuaddieren. |
-| `bundesliga_intensive_runs` | Intensive Runs | Anzahl intensiver Läufe gemäß Bundesliga-Rangliste. Die genaue Zusammenfassung der Tempobereiche ist in den geprüften Quellen nicht eindeutig erklärt; nicht automatisch mit Sprints oder ausschließlich Tempoläufen gleichsetzen. |
-| `bundesliga_pass_success_open_play_pct` | Successful Passes from Open Play (%) | Quote erfolgreicher Pässe aus dem offenen Spiel; Prozent. Keine absolute Anzahl angekommener Pässe und keine Quote über alle Standards hinweg. |
-| `bundesliga_shots_against_post_bar` | Shots against Post and Bar | Schüsse an Pfosten oder Latte; Anzahl. |
-| `bundesliga_sprints` | Sprints | Sprint-Ereignisse; Anzahl. Ab 2025/26: über 25 km/h für mindestens 0,5 Sekunden; siehe offizielle Definition unten. |
-| `bundesliga_top_speed_kmh` | Top Speed / Kilometres per Hour | Höchste gemessene Geschwindigkeit; km/h. Maximum, kein Durchschnitt und keine aufsummierbare Kennzahl. |
-
 ## Positionscodes
 
 | Code | Englisch | Deutsch |
