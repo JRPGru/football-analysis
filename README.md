@@ -1,137 +1,349 @@
-# Football Analysis
+# Football Player Analysis
 
-A personal project for exploring and visualizing Bundesliga player statistics.
+Interactive football player profiling based on FBref statistics and grouped PCA.
 
-## Overview
+The project downloads player data for a selected league and season, transforms the statistics into three interpretable player-profile dimensions, and visualizes the resulting players in an interactive 3D Plotly plot.
 
-The project currently has two main parts:
+## Features
 
-1. **Data collection**  
-   `data_downloader.py` combines Bundesliga 2025/26 player-season statistics into
-   `bundesliga_2025_26_all_players.csv`.
+- Download player statistics directly from **FBref**
+- Support for multiple leagues and seasons
+- Automatic player aggregation after transfers
+- Minimum playing-time threshold of **more than 400 minutes**
+- Three independent PCA-based player dimensions
+- Interactive 3D player visualization
+- League and season selection
+- Position, club, and age filters
+- Position-based player colours
+- Detailed player statistics on hover
+- Static frontend suitable for GitHub Pages
 
-2. **3D player-profile visualization**  
-   `prepare_pca.py` transforms the raw player statistics into three interpretable
-   PCA-based profile dimensions and writes `player_pca.csv`, which is visualized
-   interactively in the browser with Plotly.
+## Workflow
 
-The three visualization axes are:
+The project consists of three main steps:
 
-- **Physical intensity**
-- **Offensive activity**
-- **Defensive activity**
+```text
+FBref
+  │
+  ▼
+data_downloader.py
+  │
+  ▼
+Raw player statistics
+  │
+  ▼
+prepare_pca.py
+  │
+  ├── PCA player data
+  ├── PCA loadings
+  ├── PCA summary
+  └── Viz/data_sources.json
+          │
+          ▼
+      Visualization
+```
 
-Player position is **not** used to calculate the PCA scores. It is only used for
-colouring and filtering the points.
+## 1. Download Data
 
-## Data sources
+Player-season statistics are downloaded from FBref using `soccerdata`.
 
-FBref is the primary source. Bundesliga.com adds physical and other statistics
-that are unavailable from FBref.
+Example for the Bundesliga:
 
-The downloader keeps missing values as missing and reports ambiguous player-name
-matches rather than guessing.
+```powershell
+python data_downloader.py --league "GER-Bundesliga" --season "2025-2026"
+```
 
-Each row in the raw CSV represents a player/team/season record. Players who
-changed clubs can therefore occur more than once in the raw data.
+Example for the Premier League:
 
-See [CSV glossary (German)](CSV_GLOSSAR_DE.md) for explanations of all CSV
-columns, abbreviations, units, examples, and interpretation notes.
+```powershell
+python data_downloader.py --league "ENG-Premier League" --season "2025-2026"
+```
 
-## PCA preprocessing
+The data is stored automatically in league-specific directories:
 
-`prepare_pca.py` combines player rows and keeps players with more than **400
-Bundesliga minutes**.
+```text
+data/
+├── bundesliga/
+│   └── data_2025_26_all_players.csv
+│
+└── premier_league/
+    └── data_2025_26_all_players.csv
+```
 
-It then creates three independent one-component PCA scores.
+The downloader currently combines the following FBref player tables:
 
-### Physical intensity
+- `standard`
+- `shooting`
+- `playing_time`
+- `misc`
+- `keeper`
 
-Uses metrics such as:
+FBref columns are flattened while preserving the source table, for example:
 
-- distance per 90
-- sprints per 90
-- intensive runs per 90
-- top speed
-- sprints per kilometre
-- intensive runs per kilometre
+```text
+fbref_standard_playing_time_min
+fbref_shooting_standard_sh
+fbref_playing_time_team_success_plus_minus
+fbref_misc_performance_int
+fbref_keeper_performance_saves
+```
 
-### Offensive activity
+Missing values remain missing and are not interpreted as zero.
 
-Uses metrics such as:
+Players who changed clubs can appear in multiple rows in the raw data because each row represents a player/team/season combination.
+
+## 2. Prepare PCA Data
+
+Run the PCA preprocessing using the same league and season:
+
+```powershell
+python prepare_pca.py --league "GER-Bundesliga" --season "2025-2026"
+```
+
+The preprocessing:
+
+- combines multiple team rows belonging to the same player
+- sums playing time across those rows
+- keeps players with **more than 400 minutes**
+- creates per-90 and ratio-based metrics
+- median-imputes missing PCA values
+- removes unusable zero-variance features
+- standardizes all PCA features
+- calculates one principal component for each feature group
+- standardizes the resulting PCA scores
+
+Player **position is not used as a PCA feature**. It is only retained for visualization and filtering.
+
+### PC1 — Shooting
+
+Represents the player's shooting profile using:
 
 - goals per 90
-- assists per 90
 - shots per 90
 - shots on target per 90
-- crosses per 90
-- fouls drawn per 90
-- offsides per 90
+- shots on target percentage
+- goals per shot
+- goals per shot on target
+- penalties scored per 90
 - penalty attempts per 90
 
-### Defensive activity
+### PC2 — Team Success
 
-Uses metrics such as:
+Represents team performance while the player is on the pitch using:
 
-- duels won per 90
-- aerial duels won per 90
-- tackles won per 90
-- interceptions per 90
-- fouls committed per 90
+- points per match
+- team goals for per 90
+- team goals against per 90
+- plus/minus per 90
+- on-off per 90
+
+### PC3 — Miscellaneous Performance
+
+Represents a broader activity profile using:
+
 - yellow cards per 90
+- red cards per 90
+- second yellow cards per 90
+- fouls committed per 90
+- fouls drawn per 90
+- offsides per 90
+- crosses per 90
+- interceptions per 90
+- tackles won per 90
+- own goals per 90
 
-Before PCA, missing values are median-imputed and all features are standardized.
-The sign of each PCA axis is oriented so that higher values represent more
-activity in that profile dimension.
+The exact contribution of each metric can be inspected in the generated PCA loadings file.
 
-The preprocessing step generates:
+## PCA Output
 
-- `player_pca.csv` — data used by the website
-- `pca_loadings.csv` — contribution of each feature to its PCA axis
-- `pca_summary.csv` — summary of the grouped PCA
+For Bundesliga 2025/26:
 
-## Visualization
+```text
+data/bundesliga/
+├── player_pca_fbref_2025_26.csv
+├── pca_loadings_fbref_2025_26.csv
+└── pca_summary_fbref_2025_26.csv
+```
 
-The website shows every player as a point in a rotatable 3D Plotly scatter plot.
+The files contain:
 
-Position colours:
+- `player_pca_fbref_YYYY_YY.csv` — visualization-ready player data and PCA coordinates
+- `pca_loadings_fbref_YYYY_YY.csv` — feature contribution to each PCA axis
+- `pca_summary_fbref_YYYY_YY.csv` — PCA summary and explained variance
 
-- **GK** — orange
-- **DF** — yellow
-- **MF** — green
-- **FW** — blue
+The visualization coordinates are stored as:
 
-The visualization supports:
+```text
+PC1
+PC2
+PC3
+```
 
-- 3D turntable rotation
-- zooming
-- player information on hover
-- Cartesian grid
-- position filtering
-- club filtering
-- age-range filtering
+## 3. Visualization
 
-Filters do not remove unmatched players. Instead, unmatched players remain
-visible and become gray.
+The frontend is located in:
 
-By default, no filter is active and all players keep their position colour.
+```text
+Viz/
+├── index.html
+├── styles.css
+├── visualization.js
+└── data_sources.json
+```
 
-## Setup
+`prepare_pca.py` scans the prepared PCA datasets under `data/` and updates:
 
-Run the following commands from the project directory using Python 3.11:
+```text
+Viz/data_sources.json
+```
+
+This manifest is used by the static browser visualization to determine which datasets are available.
+
+The visualization provides separate selectors for:
+
+- **League**
+- **Season**
+
+Changing the selected league updates the available seasons.
+
+Changing either league or season reloads the corresponding PCA dataset and automatically rebuilds the available:
+
+- clubs
+- positions
+- age range
+- player count
+
+### Position Colours
+
+| Position | Colour |
+|----------|--------|
+| GK | Orange |
+| DF | Yellow |
+| MF | Green |
+| FW | Blue |
+
+Filters do not remove unmatched players from the plot.
+
+Instead, unmatched players remain visible in gray while matching players retain their position colour.
+
+## Running the Visualization Locally
+
+Start a local HTTP server from the **project root**:
+
+```powershell
+python -m http.server 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000/Viz/
+```
+
+Do not open `Viz/index.html` directly using `file://`, because the visualization needs HTTP access to load the dataset manifest and PCA CSV files.
+
+If the browser still displays an older JavaScript or CSS version after changes, perform a hard refresh:
+
+```text
+Ctrl + Shift + R
+```
+
+## Adding Another League
+
+For example, to add the Premier League:
+
+```powershell
+python data_downloader.py --league "ENG-Premier League" --season "2025-2026"
+python prepare_pca.py --league "ENG-Premier League" --season "2025-2026"
+```
+
+Reload the visualization and **Premier League** will appear in the league selector.
+
+## Adding Another Season
+
+For example:
+
+```powershell
+python data_downloader.py --league "GER-Bundesliga" --season "2024-2025"
+python prepare_pca.py --league "GER-Bundesliga" --season "2024-2025"
+```
+
+The new season will then appear under Bundesliga in the season selector.
+
+## Project Structure
+
+```text
+Football Analysis/
+│
+├── data/
+│   ├── bundesliga/
+│   │   ├── data_2025_26_all_players.csv
+│   │   ├── player_pca_fbref_2025_26.csv
+│   │   ├── pca_loadings_fbref_2025_26.csv
+│   │   └── pca_summary_fbref_2025_26.csv
+│   │
+│   ├── premier_league/
+│   │   ├── data_2025_26_all_players.csv
+│   │   ├── player_pca_fbref_2025_26.csv
+│   │   ├── pca_loadings_fbref_2025_26.csv
+│   │   └── pca_summary_fbref_2025_26.csv
+│   │
+│   └── ...
+│
+├── Viz/
+│   ├── index.html
+│   ├── styles.css
+│   ├── visualization.js
+│   └── data_sources.json
+│
+├── data_downloader.py
+├── prepare_pca.py
+├── requirements.txt
+└── README.md
+```
+
+## Installation
+
+Install the Python dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m playwright install chromium
 ```
 
-## Done by
-Developed by **Jossy Grundmann** (jossy.grundmann@tum.de).
+The current downloader is FBref-only and does not require Playwright or Bundesliga.com scraping.
 
-This project was created as a personal football data-analysis and visualization project, including:
+## Example Workflow
 
-- data collection and preprocessing
-- feature engineering and PCA-based player profiling
-- interactive 3D visualization
-- filtering and player comparison functionality
-- GitHub Pages deployment
+Download and prepare Bundesliga:
+
+```powershell
+python data_downloader.py --league "GER-Bundesliga" --season "2025-2026"
+python prepare_pca.py --league "GER-Bundesliga" --season "2025-2026"
+```
+
+Download and prepare Premier League:
+
+```powershell
+python data_downloader.py --league "ENG-Premier League" --season "2025-2026"
+python prepare_pca.py --league "ENG-Premier League" --season "2025-2026"
+```
+
+Start the visualization:
+
+```powershell
+python -m http.server 8000
+```
+
+Open:
+
+```text
+http://localhost:8000/Viz/
+```
+
+Both prepared leagues will then be available through the league selector.
+
+## Author
+
+Developed by **Jossy Grundmann**.
+
+Personal project for football data collection, dimensionality reduction, and interactive player-profile visualization.
